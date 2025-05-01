@@ -45,9 +45,27 @@ function TabNavigator({ seen, unseen, setSeen, setUnseen, genres, isDarkMode, to
             {...props}
             seen={seen}
             unseen={unseen}
+            onAddToSeen={(newMovie) => {
+              console.log("Adding to seen from Home:", newMovie.title);
+              setSeen([...seen, newMovie]);
+            }}
+            onAddToUnseen={(newMovie) => {
+              console.log("Adding to watchlist from Home:", newMovie.title);
+              setUnseen([...unseen, newMovie]);
+            }}
             genres={genres}
             isDarkMode={isDarkMode}
             toggleTheme={toggleTheme}
+            // Pass newReleases data - we'll simulate with recent highly-rated movies
+            newReleases={seen.length > 5 ? seen.slice(0, 10).map(m => ({
+              ...m,
+              vote_count: Math.floor(Math.random() * 5000) + 500,
+              release_date: m.release_date || new Date().toISOString().split('T')[0]
+            })) : unseen.slice(0, 10).map(m => ({
+              ...m,
+              vote_count: Math.floor(Math.random() * 5000) + 500,
+              release_date: m.release_date || new Date().toISOString().split('T')[0]
+            }))}
           />
         )}
       </Tab.Screen>
