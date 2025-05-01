@@ -82,7 +82,7 @@ function TopRatedScreen({ movies, onUpdateRating, genres, isDarkMode }) {
       duration: 300,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [slideAnim]); // Added slideAnim as dependency
 
   const closeEditModal = useCallback(() => {
     Animated.timing(slideAnim, {
@@ -94,7 +94,7 @@ function TopRatedScreen({ movies, onUpdateRating, genres, isDarkMode }) {
       setSelectedMovie(null);
       setNewRating('');
     });
-  }, []);
+  }, [slideAnim]); // Added slideAnim as dependency
 
   const updateRating = useCallback(() => {
     const rating = parseFloat(newRating);
@@ -109,7 +109,7 @@ function TopRatedScreen({ movies, onUpdateRating, genres, isDarkMode }) {
     }
     onUpdateRating(selectedMovie.id, rating);
     closeEditModal();
-  }, [newRating, selectedMovie, onUpdateRating, closeEditModal]);
+  }, [newRating, selectedMovie, onUpdateRating, closeEditModal, slideAnim]); // Added slideAnim as dependency
 
   // Function to display rating correctly
   const displayRating = useCallback((movie) => {
