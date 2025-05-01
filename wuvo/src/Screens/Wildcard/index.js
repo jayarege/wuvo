@@ -616,132 +616,312 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
             </TouchableOpacity>
             <View style={compareStyles.vsContainer}>
               <Text style={[compareStyles.vsText, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
-                VS
+              VS
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[compareStyles.posterContainer, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5' }]}
+            onPress={handleNewWin}
+            activeOpacity={0.7}
+          >
+            <Image
+              source={{ uri: getPosterUrl(newMovie.poster) }}
+              style={compareStyles.poster}
+              resizeMode="cover"
+            />
+            <View style={compareStyles.posterOverlay}>
+              <Text
+                style={[movieCardStyles.movieTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}
+                numberOfLines={2}
+              >
+                {newMovie.title}
+              </Text>
+              <Text style={[compareStyles.ratingTag, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
+                TMDb: {newMovie.score.toFixed(1)} ({newMovie.voteCount} votes)
+              </Text>
+              <Text style={[movieCardStyles.genresText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
+                {newMovie.genre_ids.map(id => genres[id] || 'Unknown').join(', ')}
               </Text>
             </View>
-            <TouchableOpacity
-              style={[compareStyles.posterContainer, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5' }]}
-              onPress={handleNewWin}
-              activeOpacity={0.7}
-            >
-              <Image
-                source={{ uri: getPosterUrl(newMovie.poster) }}
-                style={compareStyles.poster}
-                resizeMode="cover"
-              />
-              <View style={compareStyles.posterOverlay}>
-                <Text
-                  style={[movieCardStyles.movieTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}
-                  numberOfLines={2}
-                >
-                  {newMovie.title}
-                </Text>
-                <Text style={[compareStyles.ratingTag, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
-                  TMDb: {newMovie.score.toFixed(1)} ({newMovie.voteCount} votes)
-                </Text>
-                <Text style={[movieCardStyles.genresText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-                  {newMovie.genre_ids.map(id => genres[id] || 'Unknown').join(', ')}
-                </Text>
-              </View>
-            </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
+        <View style={compareStyles.actionButtons}>
+          <TouchableOpacity
+            style={[compareStyles.toughButton, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5', borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
+            onPress={handleToughChoice}
+            activeOpacity={0.7}
+          >
+            <Text style={[compareStyles.toughButtonText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
+              Too tough to decide
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[compareStyles.unseenButton, { backgroundColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
+            onPress={handleUnseen}
+            activeOpacity={0.7}
+          >
+            <Text style={[compareStyles.unseenButtonText, { color: isDarkMode ? '#F5F5F5' : '#FFFFFF' }]}>
+              Add to watchlist
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[buttonStyles.skipButton, { borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
+            onPress={handleSkip}
+            activeOpacity={0.7}
+          >
+            <Text style={[buttonStyles.skipButtonText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
+              Skip
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+    
+    {/* Filter Modal - Fixed version with proper closing tags */}
+    <Modal
+      visible={filterModalVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={cancelFilters}
+    >
+      <View style={[modalStyles.modalOverlay, styles.modalOverlay]}>
+        <View style={[
+          modalStyles.modalContent,
+          styles.modalContent,
+          { backgroundColor: isDarkMode ? '#4B0082' : '#FFFFFF' }
+        ]}>
+          <Text style={[
+            modalStyles.modalTitle,
+            { color: isDarkMode ? '#F5F5F5' : '#333' }
+          ]}>
+            Filter Top-Rated Movies
+          </Text>
+          
+          {/* Feature Description */}
+          <View style={styles.infoSection}>
+            <Text style={[
+              styles.infoText,
+              { color: isDarkMode ? '#FFD700' : '#4B0082', fontWeight: 'bold' }
+            ]}>
+              Comparing the best movies
+            </Text>
+            <Text style={[
+              styles.infoSubtext,
+              { color: isDarkMode ? '#D3D3D3' : '#666' }
+            ]}>
+              All movies shown have at least {MIN_VOTE_COUNT} votes and a minimum score of {MIN_SCORE.toFixed(1)}/10, ensuring you only compare quality films from the top 500.
+            </Text>
           </View>
-          <View style={compareStyles.actionButtons}>
+          
+          {/* Genre Filter */}
+          <View style={styles.filterSection}>
+            <Text style={[
+              styles.sectionTitle,
+              { color: isDarkMode ? '#F5F5F5' : '#333' }
+            ]}>
+              Filter by Genre
+            </Text>
+            
             <TouchableOpacity
-              style={[compareStyles.toughButton, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5', borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
-              onPress={handleToughChoice}
-              activeOpacity={0.7}
+              style={[
+                styles.genreButton,
+                { 
+                  backgroundColor: tempGenre === null 
+                    ? (isDarkMode ? '#8A2BE2' : '#4B0082') 
+                    : 'transparent',
+                  borderColor: isDarkMode ? '#8A2BE2' : '#4B0082'
+                }
+              ]}
+              onPress={() => setTempGenre(null)}
             >
-              <Text style={[compareStyles.toughButtonText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-                Too tough to decide
+              <Text style={[
+                styles.genreButtonText,
+                { 
+                  color: tempGenre === null 
+                    ? '#FFFFFF' 
+                    : (isDarkMode ? '#D3D3D3' : '#666')
+                }
+              ]}>
+                All Genres
+              </Text>
+            </TouchableOpacity>
+            
+            <ScrollView 
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.genreScrollContent}
+            >
+              {Object.entries(genres)
+                .filter(([id, name]) => name) // Filter out undefined genres
+                .map(([id, name]) => (
+                  <TouchableOpacity
+                    key={id}
+                    style={[
+                      styles.genreButton,
+                      { 
+                        backgroundColor: tempGenre === id 
+                          ? (isDarkMode ? '#8A2BE2' : '#4B0082') 
+                          : 'transparent',
+                        borderColor: isDarkMode ? '#8A2BE2' : '#4B0082'
+                      }
+                    ]}
+                    onPress={() => setTempGenre(id)}
+                  >
+                    <Text style={[
+                      styles.genreButtonText,
+                      { 
+                        color: tempGenre === id 
+                          ? '#FFFFFF' 
+                          : (isDarkMode ? '#D3D3D3' : '#666')
+                      }
+                    ]}>
+                      {name}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              }
+            </ScrollView>
+          </View>
+          
+          {/* Action Buttons */}
+          <View style={styles.modalButtons}>
+            <TouchableOpacity
+              style={[
+                styles.applyButton,
+                { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082' }
+              ]}
+              onPress={applyFilters}
+            >
+              <Text style={[
+                styles.applyButtonText,
+                { color: isDarkMode ? '#4B0082' : '#FFFFFF' }
+              ]}>
+                Apply Filters
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[compareStyles.unseenButton, { backgroundColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
-              onPress={handleUnseen}
-              activeOpacity={0.7}
+              style={[
+                styles.cancelButton,
+                { borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }
+              ]}
+              onPress={cancelFilters}
             >
-              <Text style={[compareStyles.unseenButtonText, { color: isDarkMode ? '#F5F5F5' : '#FFFFFF' }]}>
-                Add to watchlist
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[buttonStyles.skipButton, { borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
-              onPress={handleSkip}
-              activeOpacity={0.7}
-            >
-              <Text style={[buttonStyles.skipButtonText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-                Skip
+              <Text style={[
+                styles.cancelButtonText,
+                { color: isDarkMode ? '#D3D3D3' : '#666' }
+              ]}>
+                Cancel
               </Text>
             </TouchableOpacity>
           </View>
         </View>
       </View>
-      
-      {/* Filter Modal */}
-      <Modal
-        visible={filterModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={cancelFilters}
-      >
-        <View style={[modalStyles.modalOverlay, styles.modalOverlay]}>
-          <View style={[
-            modalStyles.modalContent,
-            styles.modalContent,
-            { backgroundColor: isDarkMode ? '#4B0082' : '#FFFFFF' }
-          ]}>
-            <Text style={[
-              modalStyles.modalTitle,
-              { color: isDarkMode ? '#F5F5F5' : '#333' }
-            ]}>
-              Filter Top-Rated Movies
-            </Text>
-            
-            {/* Feature Description */}
-            <View style={styles.infoSection}>
-              <Text style={[
-                styles.infoText,
-                { color: isDarkMode ? '#FFD700' : '#4B0082', fontWeight: 'bold' }
-              ]}>
-                Comparing the best movies
-              </Text>
-              <Text style={[
-                styles.infoSubtext,
-                { color: isDarkMode ? '#D3D3D3' : '#666' }
-              ]}>
-                All movies shown have at least {MIN_VOTE_COUNT} votes and a minimum score of {MIN_SCORE.toFixed(1)}/10, ensuring you only compare quality films from the top 500.
-              </Text>
-            </View>
-            
-            {/* Genre Filter */}
-            <View style={styles.filterSection}>
-              <Text style={[
-                styles.sectionTitle,
-                { color: isDarkMode ? '#F5F5F5' : '#333' }
-              ]}>
-                Filter by Genre
-              </Text>
-              
-              <TouchableOpacity
-                style={[
-                  styles.genreButton,
-                  { 
-                    backgroundColor: tempGenre === null 
-                      ? (isDarkMode ? '#8A2BE2' : '#4B0082') 
-                      : 'transparent',
-                    borderColor: isDarkMode ? '#8A2BE2' : '#4B0082'
-                  }
-                ]}
-                onPress={() => setTempGenre(null)}
-              >
-                <Text style={[
-                  styles.genreButtonText,
-                  { 
-                    color: tempGenre === null 
-                      ? '#FFFFFF' 
-                      : (isDarkMode ? '#D3D3D3' : '#666')
-                  }
-                ]}>
-                  All Genres
-                </Text>
-              </TouchableOpacity
+    </Modal>
+  </SafeAreaView>
+);
+}
+
+// Additional styles for the new components
+const styles = StyleSheet.create({
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionButton: {
+    marginLeft: 16,
+    padding: 4,
+    position: 'relative',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF9500',
+  },
+  modalOverlay: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    // Higher z-index to prevent background interaction
+    zIndex: 1000,
+  },
+  modalContent: {
+    width: '90%',
+    maxHeight: '80%',
+    elevation: 10, // Higher elevation for Android
+    shadowOpacity: 0.5, // Stronger shadow for iOS
+    // Ensure modal is above all other content
+    zIndex: 1001,
+  },
+  infoSection: {
+    backgroundColor: 'rgba(255,255,255,0.08)', // Will be overridden by isDarkMode
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 24,
+  },
+  infoText: {
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  infoSubtext: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  filterSection: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  genreScrollContent: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+  },
+  genreButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginRight: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  genreButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+  },
+  applyButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  applyButtonText: {
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  cancelButtonText: {
+    fontWeight: '600',
+    fontSize: 16,
+  }
+});
+
+export default WildcardScreen;
