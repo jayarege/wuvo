@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 
-const AuthScreen = ({ navigation }) => {
+const AuthScreen = ({ onAuthenticate, isDarkMode }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLogin, setIsLogin] = useState(true);
@@ -26,74 +26,34 @@ const AuthScreen = ({ navigation }) => {
       return;
     }
     
-    // Instead of just showing an alert, also navigate after successful login
+    // Instead of using navigation directly, call the onAuthenticate prop
     Alert.alert(
       'Success',
       'Login successful',
       [{ 
         text: 'OK', 
         onPress: () => {
-          console.log('Navigate to main app after login');
-          handleNavigateToMain();
+          console.log('Successful authentication');
+          if (onAuthenticate) {
+            onAuthenticate();
+          }
         }
       }]
     );
   };
   
-  // Centralized navigation function that can be used by both skip and regular login
-  const handleNavigateToMain = () => {
-    // Option 1: If using React Navigation v5 or v6
-    if (navigation && navigation.navigate) {
-      navigation.navigate('Main'); // Navigate to your main screen
-      return;
-    }
-    
-    // Option 2: If using React Navigation v5 or v6 with a different main screen name
-    if (navigation && navigation.navigate) {
-      // Try different possible main screen names
-      try {
-        navigation.navigate('Home');
-      } catch (error) {
-        console.warn('Could not navigate to Home, trying MainScreen');
-        try {
-          navigation.navigate('MainScreen');
-        } catch (error) {
-          console.warn('Could not navigate to MainScreen, trying Dashboard');
-          try {
-            navigation.navigate('Dashboard');
-          } catch (error) {
-            console.error('Navigation failed with all attempted screen names');
-          }
-        }
-      }
-      return;
-    }
-    
-    // Option 3: If using React Navigation v4
-    if (navigation && navigation.navigate) {
-      navigation.navigate({ routeName: 'Main' });
-      return;
-    }
-    
-    // Option 4: If using a custom navigation solution
-    if (global.navigateToMainApp) {
-      global.navigateToMainApp();
-      return;
-    }
-    
-    // If all else fails, show an error
-    console.error('Navigation is not available or configured properly');
-    Alert.alert(
-      'Development Notice',
-      'Navigation is not configured. In a real app, this would take you to the main screen.',
-      [{ text: 'OK' }]
-    );
-  };
-  
-  // Skip authentication during development
+  // Simplified skip function that calls the onAuthenticate prop
   const handleSkip = () => {
     console.log('Skipping authentication for development');
-    handleNavigateToMain();
+    if (onAuthenticate) {
+      onAuthenticate();
+    } else {
+      Alert.alert(
+        'Development Notice',
+        'Authentication callback not configured. In a real app, this would take you to the main screen.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   return (
