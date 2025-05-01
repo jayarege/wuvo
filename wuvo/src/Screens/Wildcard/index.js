@@ -101,262 +101,235 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
   }, [baselineComplete]);
   
   // =========== BASELINE MOVIES ===========
-// =========== BASELINE MOVIES ===========
-// THIS IS WHERE YOUR MOVIES GO
-// List of 250 baseline movies with their TMDB IDs
-const baselineMovies = [
-  // Top classics from your list
-  { id: 238, title: "The Godfather" },
-  { id: 278, title: "The Shawshank Redemption" },
-  { id: 240, title: "The Godfather Part II" },
-  { id: 389, title: "12 Angry Men" },
-  { id: 346, title: "Seven Samurai" },
-  { id: 424, title: "Schindler's List" },
-  { id: 680, title: "Pulp Fiction" },
-  { id: 429, title: "The Good, the Bad and the Ugly" },
-  { id: 914, title: "City Lights" },
-  { id: 14537, title: "Harakiri" },
-  { id: 510, title: "One Flew Over the Cuckoo's Nest" },
-  { id: 539, title: "Psycho" },
-  { id: 5915, title: "Modern Times" },
-  { id: 122, title: "The Lord of the Rings: The Return of the King" },
-  { id: 769, title: "GoodFellas" },
-  { id: 567, title: "Rear Window" },
-  { id: 155, title: "The Dark Knight" },
-  { id: 1585, title: "It's a Wonderful Life" },
-  { id: 496243, title: "Parasite" },
-  { id: 980, title: "Children of Paradise" },
-  { id: 28, title: "Apocalypse Now" },
-  { id: 950, title: "Sunset Boulevard" },
-  { id: 289, title: "Casablanca" },
-  { id: 18148, title: "Tokyo Story" },
-  { id: 872, title: "Singin' in the Rain" },
-  { id: 26553, title: "Sherlock Jr." },
-  { id: 935, title: "Dr. Strangelove or: How I Learned to Stop Worrying and Love the Bomb" },
-  { id: 975, title: "Paths of Glory" },
-  { id: 1891, title: "Star Wars: The Empire Strikes Back" },
-  { id: 12493, title: "High and Low" },
-  { id: 705, title: "All About Eve" },
-  { id: 1267, title: "Metropolis" },
-  { id: 120, title: "The Lord of the Rings: The Fellowship of the Ring" },
-  { id: 56078, title: "Le Trou" },
-  { id: 914, title: "The Great Dictator" },
-  { id: 335, title: "Once Upon a Time in the West" },
-  { id: 274, title: "The Silence of the Lambs" },
-  { id: 550, title: "Vertigo" },
-  { id: 11324, title: "Once Upon a Time in America" },
-  { id: 548, title: "Rashomon" },
-  { id: 4060, title: "Ran" },
-  { id: 17252, title: "Woman in the Dunes" },
-  { id: 25237, title: "Come and See" },
-  { id: 996, title: "Double Indemnity" },
-  { id: 121, title: "The Lord of the Rings: The Two Towers" },
-  { id: 15, title: "Citizen Kane" },
-  { id: 12445, title: "Fanny and Alexander" },
-  { id: 598, title: "City of God" },
-  { id: 4546, title: "The Apartment" },
-  { id: 38, title: "Satantango" },
-  { id: 8195, title: "Andrei Rublev" },
-  { id: 348, title: "Alien" },
-  { id: 398, title: "M" },
-  { id: 239, title: "Some Like It Hot" },
-  { id: 10098, title: "The Kid" },
-  { id: 5156, title: "Bicycle Thieves" },
-  { id: 103, title: "Taxi Driver" },
-  { id: 61279, title: "Stalker" },
-  { id: 31474, title: "The Passion of Joan of Arc" },
-  { id: 947, title: "Lawrence of Arabia" },
-  { id: 797, title: "Persona" },
-  { id: 15508, title: "Pather Panchali" },
-  { id: 423, title: "The Pianist" },
-  { id: 16043, title: "The World of Apu" },
-  { id: 21749, title: "Sansho the Bailiff" },
-  { id: 11, title: "Star Wars" },
-  { id: 213, title: "North by Northwest" },
-  { id: 1139, title: "A Brighter Summer Day" },
-  { id: 10681, title: "WALL-E" },
-  { id: 844, title: "Sunrise: A Song of Two Humans" },
-  { id: 582, title: "The Lives of Others" },
-  { id: 3090, title: "The Treasure of the Sierra Madre" },
-  { id: 18491, title: "Witness for the Prosecution" },
-  { id: 963, title: "The General" },
-  { id: 105, title: "Back to the Future" },
-  
-  // Modern blockbusters and popular films
-  { id: 299534, title: "Avengers: Endgame" },
-  { id: 76600, title: "Avatar" },
-  { id: 634649, title: "Spider-Man: No Way Home" },
-  { id: 140607, title: "Star Wars: The Force Awakens" },
-  { id: 299536, title: "Avengers: Infinity War" },
-  { id: 24428, title: "The Avengers" },
-  { id: 99861, title: "Avengers: Age of Ultron" },
-  { id: 10193, title: "Toy Story 3" },
-  { id: 49026, title: "The Dark Knight Rises" },
-  { id: 475557, title: "Joker" },
-  { id: 284054, title: "Black Panther" },
-  { id: 27205, title: "Inception" },
-  { id: 157336, title: "Interstellar" },
-  { id: 324857, title: "Spider-Man: Into the Spider-Verse" },
-  { id: 37799, title: "The Social Network" },
-  { id: 118340, title: "Guardians of the Galaxy" },
-  { id: 263115, title: "Logan" },
-  { id: 376867, title: "Moonlight" },
-  { id: 76203, title: "12 Years a Slave" },
-  { id: 419430, title: "Get Out" },
-  { id: 11324, title: "Shutter Island" },
-  { id: 1422, title: "The Departed" },
-  { id: 1124, title: "The Prestige" },
-  { id: 152601, title: "Her" },
-  { id: 244786, title: "Whiplash" },
-  { id: 194662, title: "Birdman" },
-  { id: 45269, title: "The King's Speech" },
-  { id: 24, title: "Kill Bill: Volume 1" },
-  { id: 393, title: "Kill Bill: Volume 2" },
-  { id: 4552, title: "Crouching Tiger, Hidden Dragon" },
-  { id: 1417, title: "Pan's Labyrinth" },
-  { id: 142, title: "Brokeback Mountain" },
-  { id: 453, title: "A Beautiful Mind" },
-  { id: 68730, title: "Argo" },
-  { id: 313369, title: "La La Land" },
-  { id: 194, title: "Amélie" },
-  { id: 4348, title: "Atonement" },
-  { id: 314365, title: "Spotlight" },
-  { id: 12162, title: "The Hurt Locker" },
-  { id: 44214, title: "Black Swan" },
-  { id: 14160, title: "Up" },
-  { id: 545611, title: "Everything Everywhere All at Once" },
-  { id: 361743, title: "Top Gun: Maverick" },
-  { id: 567093, title: "All Quiet on the Western Front" },
-  { id: 583557, title: "West Side Story" },
-  { id: 583406, title: "Nomadland" },
-  { id: 615643, title: "Minari" },
-  { id: 530915, title: "1917" },
-  { id: 398978, title: "The Irishman" },
-  { id: 546554, title: "Knives Out" },
-  { id: 627912, title: "Sound of Metal" },
-  { id: 331482, title: "Little Women" },
-  { id: 419704, title: "Ad Astra" },
-  { id: 381284, title: "Hereditary" },
-  { id: 353081, title: "Mission: Impossible – Fallout" },
-  { id: 300668, title: "Annihilation" },
-  { id: 335984, title: "Blade Runner 2049" },
-  { id: 181808, title: "Star Wars: The Last Jedi" },
-  { id: 374720, title: "Dunkirk" },
-  { id: 398818, title: "Call Me by Your Name" },
-  { id: 346364, title: "It" },
-  { id: 359940, title: "Three Billboards Outside Ebbing, Missouri" },
-  { id: 297762, title: "Wonder Woman" },
-  { id: 324552, title: "John Wick: Chapter 2" },
-  { id: 330459, title: "Rogue One: A Star Wars Story" },
-  { id: 324786, title: "Hacksaw Ridge" },
-  { id: 329865, title: "Arrival" },
-  { id: 334543, title: "Lion" },
-  { id: 269149, title: "Zootopia" },
-  { id: 334533, title: "Manchester by the Sea" },
-  { id: 293660, title: "Deadpool" },
-  { id: 76341, title: "Mad Max: Fury Road" },
-  { id: 286217, title: "The Martian" },
-  { id: 281957, title: "The Revenant" },
-  { id: 273481, title: "Sicario" },
-  { id: 318846, title: "The Big Short" },
-  { id: 120467, title: "The Grand Budapest Hotel" },
-  { id: 242582, title: "Nightcrawler" },
-  { id: 116154, title: "Edge of Tomorrow" },
-  { id: 100402, title: "Captain America: The Winter Soldier" },
-  { id: 226206, title: "Boyhood" },
-  { id: 146233, title: "Selma" },
-  { id: 245891, title: "John Wick" },
-  { id: 49047, title: "Gravity" },
-  { id: 109445, title: "Frozen" },
-  { id: 152532, title: "Dallas Buyers Club" },
-  { id: 58803, title: "Snowpiercer" },
-  { id: 168672, title: "American Hustle" },
-  { id: 75150, title: "Under the Skin" },
-  { id: 68718, title: "Django Unchained" },
-  { id: 84892, title: "The Master" },
-  { id: 72976, title: "Lincoln" },
-  { id: 37724, title: "Skyfall" },
-  { id: 59967, title: "Looper" },
-  { id: 12526, title: "Zero Dark Thirty" },
-  { id: 87827, title: "Life of Pi" },
-  { id: 70981, title: "Prometheus" },
-  { id: 74643, title: "The Artist" },
-  { id: 56292, title: "Mission: Impossible – Ghost Protocol" },
-  { id: 55721, title: "Bridesmaids" },
-  { id: 16869, title: "Inglourious Basterds" },
-  { id: 13475, title: "Star Trek" },
-  { id: 10537, title: "Moon" },
-  { id: 8321, title: "In Bruges" },
-  { id: 1726, title: "Iron Man" },
-  { id: 6977, title: "No Country for Old Men" },
-  { id: 3, title: "Persepolis" },
-  { id: 7491, title: "There Will Be Blood" },
-  { id: 10020, title: "Juno" },
-  { id: 2505, title: "The Bourne Ultimatum" },
-  { id: 1645, title: "Children of Men" },
-  { id: 1371, title: "The Queen" },
-  { id: 773, title: "Little Miss Sunshine" },
-  { id: 714, title: "Casino Royale" },
-  { id: 58, title: "Pirates of the Caribbean: Dead Man's Chest" },
-  { id: 752, title: "V for Vendetta" },
-  { id: 1584, title: "The Pursuit of Happyness" },
-  { id: 254, title: "King Kong" },
-  { id: 38, title: "Eternal Sunshine of the Spotless Mind" },
-  { id: 70, title: "Million Dollar Baby" },
-  { id: 2567, title: "The Aviator" },
-  { id: 9806, title: "The Incredibles" },
-  { id: 1954, title: "Before Sunset" },
-  { id: 673, title: "Harry Potter and the Prisoner of Azkaban" },
-  { id: 7879, title: "Ray" },
-  { id: 10625, title: "Mean Girls" },
-  { id: 8699, title: "Anchorman: The Legend of Ron Burgundy" },
-  { id: 1932, title: "Lost in Translation" },
-  { id: 12, title: "Finding Nemo" },
-  { id: 11423, title: "Memories of Murder" },
-  { id: 1411, title: "Gangs of New York" },
-  { id: 161, title: "Ocean's Eleven" },
-  { id: 9428, title: "The Royal Tenenbaums" },
-  { id: 98, title: "Gladiator" },
-  { id: 641, title: "Requiem for a Dream" },
-  { id: 1359, title: "American Psycho" },
-  { id: 8392, title: "Battle Royale" },
-  { id: 26265, title: "Remember the Titans" },
-  { id: 77, title: "Memento" },
-  { id: 180, title: "Minority Report" },
-  { id: 9286, title: "Borat" },
-  { id: 1934, title: "Training Day" },
-  { id: 2501, title: "The Bourne Identity" },
-  { id: 2503, title: "The Bourne Supremacy" },
-  { id: 129, title: "Spirited Away" },
-  { id: 12477, title: "Grave of the Fireflies" },
-  { id: 372058, title: "Your Name" }
-];
-  
-  // Get a movie from the baseline that hasn't been compared yet
-  const getNextBaselineMovie = useCallback(() => {
-    const remainingMovies = baselineMovies.filter(
-      m => !comparedMovies.includes(m.id)
-    );
+  // THIS IS WHERE YOUR MOVIES GO
+  // List of 250 baseline movies with their TMDB IDs
+  const baselineMovies = [
+    // Top classics from your list
+    { id: 238, title: "The Godfather" },
+    { id: 278, title: "The Shawshank Redemption" },
+    { id: 240, title: "The Godfather Part II" },
+    { id: 389, title: "12 Angry Men" },
+    { id: 346, title: "Seven Samurai" },
+    { id: 424, title: "Schindler's List" },
+    { id: 680, title: "Pulp Fiction" },
+    { id: 429, title: "The Good, the Bad and the Ugly" },
+    { id: 914, title: "City Lights" },
+    { id: 14537, title: "Harakiri" },
+    { id: 510, title: "One Flew Over the Cuckoo's Nest" },
+    { id: 539, title: "Psycho" },
+    { id: 5915, title: "Modern Times" },
+    { id: 122, title: "The Lord of the Rings: The Return of the King" },
+    { id: 769, title: "GoodFellas" },
+    { id: 567, title: "Rear Window" },
+    { id: 155, title: "The Dark Knight" },
+    { id: 1585, title: "It's a Wonderful Life" },
+    { id: 496243, title: "Parasite" },
+    { id: 980, title: "Children of Paradise" },
+    { id: 28, title: "Apocalypse Now" },
+    { id: 950, title: "Sunset Boulevard" },
+    { id: 289, title: "Casablanca" },
+    { id: 18148, title: "Tokyo Story" },
+    { id: 872, title: "Singin' in the Rain" },
+    { id: 26553, title: "Sherlock Jr." },
+    { id: 935, title: "Dr. Strangelove or: How I Learned to Stop Worrying and Love the Bomb" },
+    { id: 975, title: "Paths of Glory" },
+    { id: 1891, title: "Star Wars: The Empire Strikes Back" },
+    { id: 12493, title: "High and Low" },
+    { id: 705, title: "All About Eve" },
+    { id: 1267, title: "Metropolis" },
+    { id: 120, title: "The Lord of the Rings: The Fellowship of the Ring" },
+    { id: 56078, title: "Le Trou" },
+    { id: 914, title: "The Great Dictator" },
+    { id: 335, title: "Once Upon a Time in the West" },
+    { id: 274, title: "The Silence of the Lambs" },
+    { id: 550, title: "Vertigo" },
+    { id: 11324, title: "Once Upon a Time in America" },
+    { id: 548, title: "Rashomon" },
+    { id: 4060, title: "Ran" },
+    { id: 17252, title: "Woman in the Dunes" },
+    { id: 25237, title: "Come and See" },
+    { id: 996, title: "Double Indemnity" },
+    { id: 121, title: "The Lord of the Rings: The Two Towers" },
+    { id: 15, title: "Citizen Kane" },
+    { id: 12445, title: "Fanny and Alexander" },
+    { id: 598, title: "City of God" },
+    { id: 4546, title: "The Apartment" },
+    { id: 38, title: "Satantango" },
+    { id: 8195, title: "Andrei Rublev" },
+    { id: 348, title: "Alien" },
+    { id: 398, title: "M" },
+    { id: 239, title: "Some Like It Hot" },
+    { id: 10098, title: "The Kid" },
+    { id: 5156, title: "Bicycle Thieves" },
+    { id: 103, title: "Taxi Driver" },
+    { id: 61279, title: "Stalker" },
+    { id: 31474, title: "The Passion of Joan of Arc" },
+    { id: 947, title: "Lawrence of Arabia" },
+    { id: 797, title: "Persona" },
+    { id: 15508, title: "Pather Panchali" },
+    { id: 423, title: "The Pianist" },
+    { id: 16043, title: "The World of Apu" },
+    { id: 21749, title: "Sansho the Bailiff" },
+    { id: 11, title: "Star Wars" },
+    { id: 213, title: "North by Northwest" },
+    { id: 1139, title: "A Brighter Summer Day" },
+    { id: 10681, title: "WALL-E" },
+    { id: 844, title: "Sunrise: A Song of Two Humans" },
+    { id: 582, title: "The Lives of Others" },
+    { id: 3090, title: "The Treasure of the Sierra Madre" },
+    { id: 18491, title: "Witness for the Prosecution" },
+    { id: 963, title: "The General" },
+    { id: 105, title: "Back to the Future" },
     
-    if (remainingMovies.length === 0) {
-      // All baseline movies have been compared
-      if (!baselineComplete) {
-        setBaselineComplete(true);
-        setShowBaselineCompleteModal(true);
-      }
-      return null;
-    }
-    
-    // Return a random movie from the remaining baseline movies
-    return remainingMovies[Math.floor(Math.random() * remainingMovies.length)];
-  }, [comparedMovies, baselineComplete]);
-  
-  // Add a movie to the compared list
-  const markMovieAsCompared = useCallback((movieId) => {
-    if (!comparedMovies.includes(movieId)) {
-      setComparedMovies(prev => [...prev, movieId]);
-    }
-  }, [comparedMovies]);
+    // Modern blockbusters and popular films
+    { id: 299534, title: "Avengers: Endgame" },
+    { id: 76600, title: "Avatar" },
+    { id: 634649, title: "Spider-Man: No Way Home" },
+    { id: 140607, title: "Star Wars: The Force Awakens" },
+    { id: 299536, title: "Avengers: Infinity War" },
+    { id: 24428, title: "The Avengers" },
+    { id: 99861, title: "Avengers: Age of Ultron" },
+    { id: 10193, title: "Toy Story 3" },
+    { id: 49026, title: "The Dark Knight Rises" },
+    { id: 475557, title: "Joker" },
+    { id: 284054, title: "Black Panther" },
+    { id: 27205, title: "Inception" },
+    { id: 157336, title: "Interstellar" },
+    { id: 324857, title: "Spider-Man: Into the Spider-Verse" },
+    { id: 37799, title: "The Social Network" },
+    { id: 118340, title: "Guardians of the Galaxy" },
+    { id: 263115, title: "Logan" },
+    { id: 376867, title: "Moonlight" },
+    { id: 76203, title: "12 Years a Slave" },
+    { id: 419430, title: "Get Out" },
+    { id: 11324, title: "Shutter Island" },
+    { id: 1422, title: "The Departed" },
+    { id: 1124, title: "The Prestige" },
+    { id: 152601, title: "Her" },
+    { id: 244786, title: "Whiplash" },
+    { id: 194662, title: "Birdman" },
+    { id: 45269, title: "The King's Speech" },
+    { id: 24, title: "Kill Bill: Volume 1" },
+    { id: 393, title: "Kill Bill: Volume 2" },
+    { id: 4552, title: "Crouching Tiger, Hidden Dragon" },
+    { id: 1417, title: "Pan's Labyrinth" },
+    { id: 142, title: "Brokeback Mountain" },
+    { id: 453, title: "A Beautiful Mind" },
+    { id: 68730, title: "Argo" },
+    { id: 313369, title: "La La Land" },
+    { id: 194, title: "Amélie" },
+    { id: 4348, title: "Atonement" },
+    { id: 314365, title: "Spotlight" },
+    { id: 12162, title: "The Hurt Locker" },
+    { id: 44214, title: "Black Swan" },
+    { id: 14160, title: "Up" },
+    { id: 545611, title: "Everything Everywhere All at Once" },
+    { id: 361743, title: "Top Gun: Maverick" },
+    { id: 567093, title: "All Quiet on the Western Front" },
+    { id: 583557, title: "West Side Story" },
+    { id: 583406, title: "Nomadland" },
+    { id: 615643, title: "Minari" },
+    { id: 530915, title: "1917" },
+    { id: 398978, title: "The Irishman" },
+    { id: 546554, title: "Knives Out" },
+    { id: 627912, title: "Sound of Metal" },
+    { id: 331482, title: "Little Women" },
+    { id: 419704, title: "Ad Astra" },
+    { id: 381284, title: "Hereditary" },
+    { id: 353081, title: "Mission: Impossible – Fallout" },
+    { id: 300668, title: "Annihilation" },
+    { id: 335984, title: "Blade Runner 2049" },
+    { id: 181808, title: "Star Wars: The Last Jedi" },
+    { id: 374720, title: "Dunkirk" },
+    { id: 398818, title: "Call Me by Your Name" },
+    { id: 346364, title: "It" },
+    { id: 359940, title: "Three Billboards Outside Ebbing, Missouri" },
+    { id: 297762, title: "Wonder Woman" },
+    { id: 324552, title: "John Wick: Chapter 2" },
+    { id: 330459, title: "Rogue One: A Star Wars Story" },
+    { id: 324786, title: "Hacksaw Ridge" },
+    { id: 329865, title: "Arrival" },
+    { id: 334543, title: "Lion" },
+    { id: 269149, title: "Zootopia" },
+    { id: 334533, title: "Manchester by the Sea" },
+    { id: 293660, title: "Deadpool" },
+    { id: 76341, title: "Mad Max: Fury Road" },
+    { id: 286217, title: "The Martian" },
+    { id: 281957, title: "The Revenant" },
+    { id: 273481, title: "Sicario" },
+    { id: 318846, title: "The Big Short" },
+    { id: 120467, title: "The Grand Budapest Hotel" },
+    { id: 242582, title: "Nightcrawler" },
+    { id: 116154, title: "Edge of Tomorrow" },
+    { id: 100402, title: "Captain America: The Winter Soldier" },
+    { id: 226206, title: "Boyhood" },
+    { id: 146233, title: "Selma" },
+    { id: 245891, title: "John Wick" },
+    { id: 49047, title: "Gravity" },
+    { id: 109445, title: "Frozen" },
+    { id: 152532, title: "Dallas Buyers Club" },
+    { id: 58803, title: "Snowpiercer" },
+    { id: 168672, title: "American Hustle" },
+    { id: 75150, title: "Under the Skin" },
+    { id: 68718, title: "Django Unchained" },
+    { id: 84892, title: "The Master" },
+    { id: 72976, title: "Lincoln" },
+    { id: 37724, title: "Skyfall" },
+    { id: 59967, title: "Looper" },
+    { id: 12526, title: "Zero Dark Thirty" },
+    { id: 87827, title: "Life of Pi" },
+    { id: 70981, title: "Prometheus" },
+    { id: 74643, title: "The Artist" },
+    { id: 56292, title: "Mission: Impossible – Ghost Protocol" },
+    { id: 55721, title: "Bridesmaids" },
+    { id: 16869, title: "Inglourious Basterds" },
+    { id: 13475, title: "Star Trek" },
+    { id: 10537, title: "Moon" },
+    { id: 8321, title: "In Bruges" },
+    { id: 1726, title: "Iron Man" },
+    { id: 6977, title: "No Country for Old Men" },
+    { id: 3, title: "Persepolis" },
+    { id: 7491, title: "There Will Be Blood" },
+    { id: 10020, title: "Juno" },
+    { id: 2505, title: "The Bourne Ultimatum" },
+    { id: 1645, title: "Children of Men" },
+    { id: 1371, title: "The Queen" },
+    { id: 773, title: "Little Miss Sunshine" },
+    { id: 714, title: "Casino Royale" },
+    { id: 58, title: "Pirates of the Caribbean: Dead Man's Chest" },
+    { id: 752, title: "V for Vendetta" },
+    { id: 1584, title: "The Pursuit of Happyness" },
+    { id: 254, title: "King Kong" },
+    { id: 38, title: "Eternal Sunshine of the Spotless Mind" },
+    { id: 70, title: "Million Dollar Baby" },
+    { id: 2567, title: "The Aviator" },
+    { id: 9806, title: "The Incredibles" },
+    { id: 1954, title: "Before Sunset" },
+    { id: 673, title: "Harry Potter and the Prisoner of Azkaban" },
+    { id: 7879, title: "Ray" },
+    { id: 10625, title: "Mean Girls" },
+    { id: 8699, title: "Anchorman: The Legend of Ron Burgundy" },
+    { id: 1932, title: "Lost in Translation" },
+    { id: 12, title: "Finding Nemo" },
+    { id: 11423, title: "Memories of Murder" },
+    { id: 1411, title: "Gangs of New York" },
+    { id: 161, title: "Ocean's Eleven" },
+    { id: 9428, title: "The Royal Tenenbaums" },
+    { id: 98, title: "Gladiator" },
+    { id: 641, title: "Requiem for a Dream" },
+    { id: 1359, title: "American Psycho" },
+    { id: 8392, title: "Battle Royale" },
+    { id: 26265, title: "Remember the Titans" },
+    { id: 77, title: "Memento" },
+    { id: 180, title: "Minority Report" },
+    { id: 9286, title: "Borat" },
+    { id: 1934, title: "Training Day" },
+    { id: 2501, title: "The Bourne Identity" },
+    { id: 2503, title: "The Bourne Supremacy" },
+    { id: 129, title: "Spirited Away" },
+    { id: 12477, title: "Grave of the Fireflies" },
+    { id: 372058, title: "Your Name" }
+  ];
   
   // Get movie details from TMDB API
   const getMovieDetails = useCallback(async (movieId) => {
@@ -549,24 +522,39 @@ const baselineMovies = [
       const randomSeenMovie = eligibleSeenMovies[Math.floor(Math.random() * eligibleSeenMovies.length)];
       setSeenMovie(randomSeenMovie);
       
-      // Decide whether to use baseline or recommendation
+      // Find remaining baseline movies (not yet compared)
+      const remainingBaselineMovies = baselineMovies.filter(
+        m => !comparedMovies.includes(m.id)
+      );
+      
+      // Always prioritize baseline movies over recommendations
       let newMovieData = null;
       
-      if (!baselineComplete) {
-        // Get next movie from baseline
-        const nextBaselineMovie = getNextBaselineMovie();
+      if (remainingBaselineMovies.length > 0) {
+        // Still have baseline movies to show - always show these first regardless of baselineComplete flag
+        // Get a random movie from remaining baseline
+        const randomBaselineMovie = remainingBaselineMovies[Math.floor(Math.random() * remainingBaselineMovies.length)];
+        console.log('Using baseline movie:', randomBaselineMovie.title);
         
-        if (nextBaselineMovie) {
-          console.log('Using baseline movie:', nextBaselineMovie.title);
-          // Fetch full details for the baseline movie
-          newMovieData = await getMovieDetails(nextBaselineMovie.id);
-        } else {
-          // All baseline movies have been compared, switch to recommendations
-          console.log('All baseline movies compared, switching to recommendations');
-          newMovieData = await getSimilarMovie();
+        // Fetch full details for the baseline movie
+        newMovieData = await getMovieDetails(randomBaselineMovie.id);
+        
+        // Check if this completes the baseline collection
+        if (remainingBaselineMovies.length === 1 && !baselineComplete) {
+          // This is the last baseline movie, show completion notice after this comparison
+          setTimeout(() => {
+            setBaselineComplete(true);
+            setShowBaselineCompleteModal(true);
+          }, 1000);
         }
       } else {
-        // Baseline is complete, use recommendations
+        // All baseline movies have been compared, now switch to recommendations
+        if (!baselineComplete) {
+          setBaselineComplete(true);
+          setShowBaselineCompleteModal(true);
+        }
+        
+        // Use recommendation algorithm
         console.log('Using recommendation algorithm');
         newMovieData = await getSimilarMovie();
       }
@@ -586,7 +574,7 @@ const baselineMovies = [
     selectedGenre, 
     genres, 
     baselineComplete, 
-    getNextBaselineMovie, 
+    comparedMovies,
     getMovieDetails, 
     getSimilarMovie
   ]);
@@ -608,6 +596,13 @@ const baselineMovies = [
       isLoadingRef.current = true;
     };
   }, [fetchRandomMovie]);
+  
+  // Add a movie to the compared list
+  const markMovieAsCompared = useCallback((movieId) => {
+    if (!comparedMovies.includes(movieId)) {
+      setComparedMovies(prev => [...prev, movieId]);
+    }
+  }, [comparedMovies]);
   
   // Save current filter settings before showing modal
   const openFilterModal = useCallback(() => {
@@ -991,7 +986,7 @@ const baselineMovies = [
       <SafeAreaView style={[layoutStyles.safeArea, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
         <View style={[stateStyles.errorContainer, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5' }]}>
           <Ionicons name="information-circle-outline" size={48} color={isDarkMode ? '#FFD700' : '#4B0082'} />
-          <Text style={[stateStyles.errorText, { color: isDarkMode ?'#FFD700' : '#4B0082' }]}>
+          <Text style={[stateStyles.errorText, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
             {error}
           </Text>
           <Text style={[stateStyles.errorSubText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
