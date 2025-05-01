@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -8,7 +8,8 @@ import {
   SafeAreaView,
   Modal,
   ScrollView,
-  StyleSheet
+  StyleSheet,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import layoutStyles from '../../Styles/layoutStyles';
@@ -20,13 +21,11 @@ import buttonStyles from '../../Styles/buttonStyles';
 import modalStyles from '../../Styles/modalStyles';
 
 const API_KEY = 'b401be0ea16515055d8d0bde16f80069';
-const MIN_VOTE_COUNT_LOW = 1000; // Minimum votes required from TMDB (least selective)
-const MIN_VOTE_COUNT_HIGH = 25000; // Maximum votes required (most selective)
-const MIN_SCORE_LOW = 5.0; // Minimum score (least selective)
-const MIN_SCORE_HIGH = 8.0; // Minimum score (most selective)
-const MAX_RATING_CHANGE = 0.5; // Maximum rating change per comparison
+const MIN_VOTE_COUNT = 500; // Minimum number of votes required
+const MIN_SCORE = 7.0; // Minimum score threshold
 
 function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, genres, isDarkMode }) {
+  // Movie data state
   const [seenMovie, setSeenMovie] = useState(null);
   const [newMovie, setNewMovie] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -36,31 +35,29 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
   // Filter state
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState(null);
-  const [selectivity, setSelectivity] = useState(0.3); // Default to a moderate selectivity (0-1 scale)
   
-  // Local filter state for modal (prevents background UI updates)
+  // Local filter state for modal
   const [tempGenre, setTempGenre] = useState(null);
-  const [tempSelectivity, setTempSelectivity] = useState(0.3);
   
-  // Calculate current min vote count and score based on selectivity slider
-  const calculateMinRequirements = useCallback((selectivityValue) => {
-    const voteCount = Math.round(
-      MIN_VOTE_COUNT_LOW + (MIN_VOTE_COUNT_HIGH - MIN_VOTE_COUNT_LOW) * selectivityValue
-    );
-    
-    const score = MIN_SCORE_LOW + (MIN_SCORE_HIGH - MIN_SCORE_LOW) * selectivityValue;
-    
-    return { voteCount, score };
-  }, []);
-  
-  const { voteCount: currentMinVoteCount, score: currentMinScore } = calculateMinRequirements(selectivity);
+  // Ref to prevent multiple concurrent API calls
+  const isLoadingRef = useRef(false);
   
   // Fetch random movie from TMDB with filters
   const fetchRandomMovie = useCallback(() => {
+    // Guard against concurrent API calls
+    if (isLoadingRef.current) {
+      console.log('Already loading, skipping new fetch');
+      return;
+    }
+    
+    isLoadingRef.current = true;
+    setLoading(true);
+    
     // Check if we have enough rated movies
     if (seen.length < 3) {
       setError('You must have at least 3 movies ranked to use Wildcard mode.');
       setLoading(false);
+      isLoadingRef.current = false;
       return;
     }
 
@@ -76,6 +73,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
       if (eligibleSeenMovies.length < 2) {
         setError(`Not enough movies in the "${genres[selectedGenre]}" genre. Please rate more movies in this genre or select a different genre.`);
         setLoading(false);
+        isLoadingRef.current = false;
         return;
       }
     }
@@ -83,15 +81,23 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     const randomSeenMovie = eligibleSeenMovies[Math.floor(Math.random() * eligibleSeenMovies.length)];
     setSeenMovie(randomSeenMovie);
 
-    // Pick a random page number between 1-5
-    const pageNumber = Math.floor(Math.random() * 5) + 1;
-    
-    // API endpoint - if genre is selected, use discover endpoint to filter by genre
-    let apiUrl = `https://api.themoviedb.org/3/movie/popular?api_key=${API_KEY}&language=en-US&page=${pageNumber}`;
+    // For fetching top-rated movies, use the /discover endpoint instead of /popular
+    // This allows us to filter by vote_count to get only well-reviewed movies
+    let apiUrl = '';
     
     if (selectedGenre) {
-      apiUrl = `https://api.themoviedb.org/3/discover/movie?api_key=${API_KEY}&language=en-US&sort_by=popularity.desc&with_genres=${selectedGenre}&page=${pageNumber}`;
+      // With genre filter
+      apiUrl = `https://api.themoviedb.org/3/discover/movie?api_key=${API_KEY}&language=en-US&sort_by=vote_average.desc&vote_count.gte=${MIN_VOTE_COUNT}&with_genres=${selectedGenre}`;
+    } else {
+      // No genre filter - get top rated with vote count filter
+      apiUrl = `https://api.themoviedb.org/3/discover/movie?api_key=${API_KEY}&language=en-US&sort_by=vote_average.desc&vote_count.gte=${MIN_VOTE_COUNT}`;
     }
+    
+    // Random page between 1-25 (TMDB limits to 500 results over 25 pages)
+    const pageNumber = Math.floor(Math.random() * 25) + 1;
+    apiUrl = `${apiUrl}&page=${pageNumber}`;
+    
+    console.log('Fetching from API: ', apiUrl);
     
     // Fetch a movie from TMDB
     fetch(apiUrl)
@@ -104,25 +110,25 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
           throw new Error('Invalid API response format');
         }
         
+        console.log(`Found ${data.results.length} movies on page ${pageNumber}`);
+        
         // Filter out movies you've already seen or are in your watchlist
-        // Also filter by minimum vote count and score
         const filteredMovies = data.results.filter(
           m =>
             m.poster_path &&
-            m.vote_count >= currentMinVoteCount && 
-            m.vote_average >= currentMinScore &&
+            m.vote_average >= MIN_SCORE &&
             !seen.some(sm => sm.id === m.id) &&
             !unseen.some(um => um.id === m.id)
         );
         
+        console.log(`After filtering: ${filteredMovies.length} movies remain`);
+        
         if (filteredMovies.length === 0) {
-          // Try again with a different page if no suitable movies found
-          if (seen.length > 100 && currentMinVoteCount > 10000) {
-            setError(`Couldn't find movies matching your current filters. Try adjusting your selectivity level.`);
-            setLoading(false);
-            return;
-          }
-          fetchRandomMovie();
+          // We'll try a different approach if we can't find any movies
+          // Instead of recursively calling fetchRandomMovie (which can cause the spazzing)
+          setError(`Couldn't find new movies matching your criteria. Try a different genre or check back later.`);
+          setLoading(false);
+          isLoadingRef.current = false;
           return;
         }
         
@@ -146,26 +152,40 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
         
         setNewMovie(formattedMovie);
         setLoading(false);
+        isLoadingRef.current = false;
       })
       .catch(err => {
         console.error('Error fetching movie:', err);
         setError(`Failed to load movie: ${err.message}`);
         setLoading(false);
+        isLoadingRef.current = false;
       });
-  }, [seen, unseen, selectedGenre, currentMinVoteCount, currentMinScore, genres]);
+  }, [seen, unseen, selectedGenre, genres]);
 
-  // Initial fetch on component mount
+  // Initial fetch on component mount - with error handling
   useEffect(() => {
-    fetchRandomMovie();
+    try {
+      fetchRandomMovie();
+    } catch (err) {
+      console.error('Error in initial movie fetch:', err);
+      setError('Something went wrong while loading. Please try again.');
+      setLoading(false);
+      isLoadingRef.current = false;
+    }
+    
+    // Cleanup function
+    return () => {
+      // Set flag to prevent any ongoing fetches from completing
+      isLoadingRef.current = true;
+    };
   }, [fetchRandomMovie]);
   
   // Save current filter settings before showing modal
   const openFilterModal = useCallback(() => {
     // Initialize temp values with current settings
     setTempGenre(selectedGenre);
-    setTempSelectivity(selectivity);
     setFilterModalVisible(true);
-  }, [selectedGenre, selectivity]);
+  }, [selectedGenre]);
   
   // Apply filter changes and fetch new movies
   const applyFilters = useCallback(() => {
@@ -173,22 +193,29 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     setFilterModalVisible(false);
     
     // Only reload if settings changed
-    const settingsChanged = selectedGenre !== tempGenre || selectivity !== tempSelectivity;
+    const settingsChanged = selectedGenre !== tempGenre;
     
     // Apply temp values to actual state
     setSelectedGenre(tempGenre);
-    setSelectivity(tempSelectivity);
     
     // Only fetch new movie if settings actually changed
     if (settingsChanged) {
       // Use setTimeout to ensure the modal is completely gone before changing UI state
       setTimeout(() => {
         setNewMovie(null);
+        setSeenMovie(null);
         setLoading(true);
-        fetchRandomMovie();
-      }, 100);
+        try {
+          fetchRandomMovie();
+        } catch (err) {
+          console.error('Error after filter change:', err);
+          setError('Something went wrong while loading. Please try again.');
+          setLoading(false);
+          isLoadingRef.current = false;
+        }
+      }, 300);
     }
-  }, [selectedGenre, selectivity, tempGenre, tempSelectivity, fetchRandomMovie]);
+  }, [selectedGenre, tempGenre, fetchRandomMovie]);
   
   // Cancel filter changes
   const cancelFilters = useCallback(() => {
@@ -210,6 +237,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     const winnerBoost = winner.userRating < loser.userRating ? 0.2 : 0;
     
     // Apply adjustments (capped at maximum change)
+    const MAX_RATING_CHANGE = 0.5;
     const winnerIncrease = Math.min(MAX_RATING_CHANGE, winnerAdjustment + winnerBoost);
     const loserDecrease = Math.min(MAX_RATING_CHANGE, loserAdjustment);
     
@@ -245,6 +273,11 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
 
   // Handle user choosing the seen movie as better
   const handleSeenWin = useCallback(() => {
+    if (isLoadingRef.current || !seenMovie || !newMovie) {
+      console.log('Ignoring click while loading or missing movies');
+      return;
+    }
+    
     // Update ratings
     const { updatedSeenMovie, updatedNewMovie } = adjustRating(seenMovie, newMovie, true);
     
@@ -258,12 +291,18 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     
     // Fetch the next comparison
     setNewMovie(null);
+    setSeenMovie(null);
     setLoading(true);
     fetchRandomMovie();
   }, [seenMovie, newMovie, seen, setSeen, adjustRating, fetchRandomMovie]);
 
   // Handle user choosing the new movie as better
   const handleNewWin = useCallback(() => {
+    if (isLoadingRef.current || !seenMovie || !newMovie) {
+      console.log('Ignoring click while loading or missing movies');
+      return;
+    }
+    
     // Update ratings
     const { updatedSeenMovie, updatedNewMovie } = adjustRating(newMovie, seenMovie, false);
     
@@ -277,12 +316,18 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     
     // Fetch the next comparison
     setNewMovie(null);
+    setSeenMovie(null);
     setLoading(true);
     fetchRandomMovie();
   }, [seenMovie, newMovie, seen, setSeen, adjustRating, fetchRandomMovie]);
 
   // Handle user hasn't seen the new movie
   const handleUnseen = useCallback(() => {
+    if (isLoadingRef.current || !seenMovie || !newMovie) {
+      console.log('Ignoring click while loading or missing movies');
+      return;
+    }
+    
     // Add to watchlist
     onAddToUnseen(newMovie);
     
@@ -294,12 +339,18 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     
     // Fetch the next comparison
     setNewMovie(null);
+    setSeenMovie(null);
     setLoading(true);
     fetchRandomMovie();
   }, [newMovie, onAddToUnseen, fetchRandomMovie]);
 
   // Handle user skipping this comparison
   const handleSkip = useCallback(() => {
+    if (isLoadingRef.current || !seenMovie || !newMovie) {
+      console.log('Ignoring click while loading or missing movies');
+      return;
+    }
+    
     // Save action for undo
     setLastAction({
       type: 'skip',
@@ -309,12 +360,18 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     
     // Just fetch a new comparison
     setNewMovie(null);
+    setSeenMovie(null);
     setLoading(true);
     fetchRandomMovie();
   }, [seenMovie, newMovie, fetchRandomMovie]);
 
-  // Handle tough choice (now gives advantage to lower-rated movie)
+  // Handle tough choice
   const handleToughChoice = useCallback(() => {
+    if (isLoadingRef.current || !seenMovie || !newMovie) {
+      console.log('Ignoring click while loading or missing movies');
+      return;
+    }
+    
     // Determine which movie has the lower rating
     const lowerRatedMovie = seenMovie.userRating <= newMovie.score ? seenMovie : newMovie;
     const higherRatedMovie = lowerRatedMovie === seenMovie ? newMovie : seenMovie;
@@ -376,13 +433,14 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     
     // Fetch the next comparison
     setNewMovie(null);
+    setSeenMovie(null);
     setLoading(true);
     fetchRandomMovie();
   }, [seenMovie, newMovie, seen, setSeen, fetchRandomMovie]);
 
   // Handle undo last action
   const handleUndo = useCallback(() => {
-    if (!lastAction) return;
+    if (!lastAction || isLoadingRef.current) return;
     
     let filteredSeen;
     let restoredSeen;
@@ -438,6 +496,15 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     setLastAction(null);
   }, [lastAction, seen, unseen, setSeen, onAddToUnseen]);
 
+  const handleRetry = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    setNewMovie(null);
+    setSeenMovie(null);
+    isLoadingRef.current = false;
+    fetchRandomMovie();
+  }, [fetchRandomMovie]);
+
   const getPosterUrl = path => `https://image.tmdb.org/t/p/w342${path}`;
 
   // Loading state
@@ -447,7 +514,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
         <View style={stateStyles.loadingContainer}>
           <ActivityIndicator size="large" color={isDarkMode ? '#FFD700' : '#4B0082'} />
           <Text style={[stateStyles.loadingText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-            Loading comparison...
+            Loading top-rated movies...
           </Text>
         </View>
       </SafeAreaView>
@@ -464,15 +531,11 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
             {error}
           </Text>
           <Text style={[stateStyles.errorSubText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-            Go to the Top 10 tab to rank more movies.
+            {seen.length < 3 ? 'Go to the Add Movie tab to rate more movies.' : 'This may be temporary. Try again or select a different genre.'}
           </Text>
           <TouchableOpacity
             style={[buttonStyles.retryButton, { borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
-            onPress={() => {
-              setError(null);
-              setLoading(true);
-              fetchRandomMovie();
-            }}
+            onPress={handleRetry}
             activeOpacity={0.7}
           >
             <Text style={[buttonStyles.retryButtonText, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
@@ -485,9 +548,6 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
   }
 
   if (!seenMovie || !newMovie) return null;
-  
-  // Calculate actual min requirements for display based on temp selectivity
-  const { voteCount: tempMinVotes, score: tempMinScore } = calculateMinRequirements(tempSelectivity);
 
   // Main UI
   return (
@@ -499,7 +559,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
         ]}
       >
         <Text style={[headerStyles.screenTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}>
-          Wildcard Comparison
+          Top 500 Comparison
         </Text>
         <View style={styles.actionRow}>
           {lastAction && (
@@ -634,8 +694,24 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
               modalStyles.modalTitle,
               { color: isDarkMode ? '#F5F5F5' : '#333' }
             ]}>
-              Filter Comparisons
+              Filter Top-Rated Movies
             </Text>
+            
+            {/* Feature Description */}
+            <View style={styles.infoSection}>
+              <Text style={[
+                styles.infoText,
+                { color: isDarkMode ? '#FFD700' : '#4B0082', fontWeight: 'bold' }
+              ]}>
+                Comparing the best movies
+              </Text>
+              <Text style={[
+                styles.infoSubtext,
+                { color: isDarkMode ? '#D3D3D3' : '#666' }
+              ]}>
+                All movies shown have at least {MIN_VOTE_COUNT} votes and a minimum score of {MIN_SCORE.toFixed(1)}/10, ensuring you only compare quality films from the top 500.
+              </Text>
+            </View>
             
             {/* Genre Filter */}
             <View style={styles.filterSection}>
@@ -668,310 +744,4 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
                 ]}>
                   All Genres
                 </Text>
-              </TouchableOpacity>
-              
-              <ScrollView 
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.genreScrollContent}
-              >
-                {Object.entries(genres)
-                  .filter(([id, name]) => name) // Filter out undefined genres
-                  .map(([id, name]) => (
-                    <TouchableOpacity
-                      key={id}
-                      style={[
-                        styles.genreButton,
-                        { 
-                          backgroundColor: tempGenre === id 
-                            ? (isDarkMode ? '#8A2BE2' : '#4B0082') 
-                            : 'transparent',
-                          borderColor: isDarkMode ? '#8A2BE2' : '#4B0082'
-                        }
-                      ]}
-                      onPress={() => setTempGenre(id)}
-                    >
-                      <Text style={[
-                        styles.genreButtonText,
-                        { 
-                          color: tempGenre === id 
-                            ? '#FFFFFF' 
-                            : (isDarkMode ? '#D3D3D3' : '#666')
-                        }
-                      ]}>
-                        {name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))
-                }
-              </ScrollView>
-            </View>
-            
-            {/* Selectivity Buttons */}
-            <View style={styles.filterSection}>
-              <Text style={[
-                styles.sectionTitle,
-                { color: isDarkMode ? '#F5F5F5' : '#333' }
-              ]}>
-                Selectivity
-              </Text>
-              
-              <View style={styles.selectivityButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.selectivityButton,
-                    { 
-                      backgroundColor: tempSelectivity <= 0.33 
-                        ? (isDarkMode ? '#8A2BE2' : '#4B0082') 
-                        : 'transparent',
-                      borderColor: isDarkMode ? '#8A2BE2' : '#4B0082'
-                    }
-                  ]}
-                  onPress={() => setTempSelectivity(0.1)}
-                >
-                  <Text style={{ 
-                    color: tempSelectivity <= 0.33 ? '#FFFFFF' : (isDarkMode ? '#D3D3D3' : '#666'),
-                    fontWeight: '500' 
-                  }}>
-                    Less Selective
-                  </Text>
-                  <Text style={{ 
-                    color: tempSelectivity <= 0.33 ? '#FFFFFF' : (isDarkMode ? '#D3D3D3' : '#666'),
-                    fontSize: 12 
-                  }}>
-                    (1,000+ votes, 5.0+ rating)
-                  </Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[
-                    styles.selectivityButton,
-                    { 
-                      backgroundColor: tempSelectivity > 0.33 && tempSelectivity <= 0.66
-                        ? (isDarkMode ? '#8A2BE2' : '#4B0082') 
-                        : 'transparent',
-                      borderColor: isDarkMode ? '#8A2BE2' : '#4B0082'
-                    }
-                  ]}
-                  onPress={() => setTempSelectivity(0.5)}
-                >
-                  <Text style={{ 
-                    color: tempSelectivity > 0.33 && tempSelectivity <= 0.66 ? '#FFFFFF' : (isDarkMode ? '#D3D3D3' : '#666'),
-                    fontWeight: '500' 
-                  }}>
-                    Medium
-                  </Text>
-                  <Text style={{ 
-                    color: tempSelectivity > 0.33 && tempSelectivity <= 0.66 ? '#FFFFFF' : (isDarkMode ? '#D3D3D3' : '#666'),
-                    fontSize: 12 
-                  }}>
-                    (10,000+ votes, 6.5+ rating)
-                  </Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[
-                    styles.selectivityButton,
-                    { 
-                      backgroundColor: tempSelectivity > 0.66
-                        ? (isDarkMode ? '#8A2BE2' : '#4B0082') 
-                        : 'transparent',
-                      borderColor: isDarkMode ? '#8A2BE2' : '#4B0082'
-                    }
-                  ]}
-                  onPress={() => setTempSelectivity(0.9)}
-                >
-                  <Text style={{ 
-                    color: tempSelectivity > 0.66 ? '#FFFFFF' : (isDarkMode ? '#D3D3D3' : '#666'),
-                    fontWeight: '500' 
-                  }}>
-                    More Selective
-                  </Text>
-                  <Text style={{ 
-                    color: tempSelectivity > 0.66 ? '#FFFFFF' : (isDarkMode ? '#D3D3D3' : '#666'),
-                    fontSize: 12 
-                  }}>
-                    (25,000+ votes, 8.0+ rating)
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.selectivityInfo}>
-                <Text style={[
-                  styles.infoText,
-                  { color: isDarkMode ? '#D3D3D3' : '#666' }
-                ]}>
-                  Current minimum requirements:
-                </Text>
-                <Text style={[
-                  styles.infoValue,
-                  { color: isDarkMode ? '#FFD700' : '#4B0082' }
-                ]}>
-                  • {tempMinVotes.toLocaleString()} votes minimum
-                </Text>
-                <Text style={[
-                  styles.infoValue,
-                  { color: isDarkMode ? '#FFD700' : '#4B0082' }
-                ]}>
-                  • {tempMinScore.toFixed(1)} minimum score
-                </Text>
-              </View>
-            </View>
-            
-            {/* Action Buttons */}
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.applyButton,
-                  { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082' }
-                ]}
-                onPress={applyFilters}
-              >
-                <Text style={[
-                  styles.applyButtonText,
-                  { color: isDarkMode ? '#4B0082' : '#FFFFFF' }
-                ]}>
-                  Apply Filters
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.cancelButton,
-                  { borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }
-                ]}
-                onPress={cancelFilters}
-              >
-                <Text style={[
-                  styles.cancelButtonText,
-                  { color: isDarkMode ? '#D3D3D3' : '#666' }
-                ]}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  );
-}
-
-// Additional styles for the new components
-const styles = StyleSheet.create({
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionButton: {
-    marginLeft: 16,
-    padding: 4,
-    position: 'relative',
-  },
-  filterBadge: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FF9500',
-  },
-  modalOverlay: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    // Higher z-index to prevent background interaction
-    zIndex: 1000,
-  },
-  modalContent: {
-    width: '90%',
-    maxHeight: '80%',
-    elevation: 10, // Higher elevation for Android
-    shadowOpacity: 0.5, // Stronger shadow for iOS
-    // Ensure modal is above all other content
-    zIndex: 1001,
-  },
-  filterSection: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  genreScrollContent: {
-    flexDirection: 'row',
-    paddingVertical: 8,
-  },
-  genreButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginRight: 8,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  genreButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  selectivityButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  selectivityButton: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginHorizontal: 4,
-    alignItems: 'center',
-  },
-  selectivityInfo: {
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    padding: 12,
-    borderRadius: 8,
-  },
-  infoText: {
-    fontSize: 14,
-    marginBottom: 8,
-    fontWeight: '500',
-  },
-  infoValue: {
-    fontSize: 14,
-    marginLeft: 8,
-    marginBottom: 4,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-  applyButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  applyButtonText: {
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  cancelButtonText: {
-    fontWeight: '600',
-    fontSize: 16,
-  }
-});
-
-export default WildcardScreen;
+              </TouchableOpacity
