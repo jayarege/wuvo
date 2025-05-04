@@ -13,16 +13,24 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wuvo.wuvo"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.wuvo.wuvo"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "scheme": "wuvo",
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id"
+      }
     }
   }
 }
