@@ -8,16 +8,95 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
-  Dimensions
+  Dimensions,
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Make sure to register redirect
+WebBrowser.maybeCompleteAuthSession();
 
 const { width, height } = Dimensions.get('window');
+
+// These values would come from your Google Cloud Console
+// Replace with your own values
+const CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID";
+const ANDROID_CLIENT_ID = "YOUR_ANDROID_CLIENT_ID"; // If you're targeting Android
+const IOS_CLIENT_ID = "YOUR_IOS_CLIENT_ID"; // If you're targeting iOS
+const EXPO_CLIENT_ID = "YOUR_EXPO_CLIENT_ID"; // For Expo Go
 
 const AuthScreen = ({ onAuthenticate, isDarkMode }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLogin, setIsLogin] = useState(true);
+  const [userInfo, setUserInfo] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Set up Google Auth
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    expoClientId: EXPO_CLIENT_ID,
+    iosClientId: IOS_CLIENT_ID,
+    androidClientId: ANDROID_CLIENT_ID,
+    webClientId: CLIENT_ID,
+  });
+
+  // Check if user is already logged in
+  useEffect(() => {
+    const checkLoginStatus = async () => {
+      try {
+        const userJson = await AsyncStorage.getItem('@user_info');
+        if (userJson) {
+          setUserInfo(JSON.parse(userJson));
+          onAuthenticate(); // Auto-login if user data exists
+        }
+      } catch (e) {
+        console.error('Failed to load user data', e);
+      }
+    };
+    
+    checkLoginStatus();
+  }, []);
+
+  // Handle Google authentication response
+  useEffect(() => {
+    if (response?.type === 'success') {
+      setIsLoading(true);
+      // Extract authentication token
+      const { authentication } = response;
+      
+      // Get user info using the access token
+      fetchUserInfo(authentication.accessToken);
+    }
+  }, [response]);
+
+  const fetchUserInfo = async (token) => {
+    if (!token) return;
+    
+    try {
+      const response = await fetch(
+        'https://www.googleapis.com/userinfo/v2/me',
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      
+      const user = await response.json();
+      await AsyncStorage.setItem('@user_info', JSON.stringify(user));
+      
+      setUserInfo(user);
+      setIsLoading(false);
+      
+      // Authenticate and navigate to main app
+      onAuthenticate();
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      setIsLoading(false);
+      Alert.alert('Authentication Error', 'Failed to get user information.');
+    }
+  };
 
   // Function to handle regular authentication
   const handleAuthentication = () => {
@@ -26,7 +105,7 @@ const AuthScreen = ({ onAuthenticate, isDarkMode }) => {
       return;
     }
     
-    // Instead of using navigation directly, call the onAuthenticate prop
+    // For demo purposes, immediately authenticate
     Alert.alert(
       'Success',
       'Login successful',
@@ -40,6 +119,19 @@ const AuthScreen = ({ onAuthenticate, isDarkMode }) => {
         }
       }]
     );
+  };
+  
+  // Handle Google Sign In
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    
+    try {
+      await promptAsync();
+    } catch (error) {
+      console.error('Google Sign In Error:', error);
+      Alert.alert('Authentication Error', 'Failed to sign in with Google.');
+      setIsLoading(false);
+    }
   };
   
   // Simplified skip function that calls the onAuthenticate prop
@@ -123,8 +215,11 @@ const AuthScreen = ({ onAuthenticate, isDarkMode }) => {
         <TouchableOpacity 
           style={styles.signInButton}
           onPress={handleAuthentication}
+          disabled={isLoading}
         >
-          <Text style={styles.signInButtonText}>Sign In</Text>
+          <Text style={styles.signInButtonText}>
+            {isLoading ? 'Signing in...' : 'Sign In'}
+          </Text>
         </TouchableOpacity>
         
         {/* Direct Skip Link - More visible alternative */}
@@ -141,14 +236,24 @@ const AuthScreen = ({ onAuthenticate, isDarkMode }) => {
         </View>
         
         {/* Social Sign In */}
-        <TouchableOpacity style={styles.socialButton}>
+        <TouchableOpacity 
+          style={styles.socialButton}
+          onPress={handleGoogleSignIn}
+          disabled={isLoading}
+        >
           <View style={styles.socialIconContainer}>
             <Ionicons name="logo-google" size={20} color="#FFFFFF" />
           </View>
-          <Text style={styles.socialButtonText}>Continue with Google</Text>
+          <Text style={styles.socialButtonText}>
+            {isLoading ? 'Connecting...' : 'Continue with Google'}
+          </Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.socialButton}>
+        <TouchableOpacity 
+          style={styles.socialButton}
+          onPress={() => Alert.alert('Notice', 'Apple Sign In not configured yet.')}
+          disabled={isLoading}
+        >
           <View style={styles.socialIconContainer}>
             <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
           </View>
