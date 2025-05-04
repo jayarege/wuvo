@@ -13,7 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  Keyboard // Add Keyboard import
+  Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import layoutStyles from '../../Styles/layoutStyles';
@@ -173,9 +173,12 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
             genre_ids: m.genre_ids.slice(0, 3),
             alreadyRated: !!existingMovie,
             currentRating: existingMovie ? existingMovie.userRating : null,
-            inWatchlist: inWatchlist
+            inWatchlist: inWatchlist,
+            popularity: m.popularity || 0 // Add popularity for sorting
           };
-        });
+        })
+        // Sort by popularity (highest first) to show most viewed movies first
+        .sort((a, b) => b.popularity - a.popularity || b.voteCount - a.voteCount);
       
       setSearchResults(filteredResults);
     } catch (err) {
@@ -313,7 +316,15 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
           {/* Suggestions dropdown */}
           {showSuggestions && (
             <ScrollView
-              style={styles.suggestionsContainer}
+              style={[
+                styles.suggestionsContainer,
+                {
+                  backgroundColor: isDarkMode 
+                    ? 'rgba(75, 0, 130, 0.85)' // Semi-transparent dark purple
+                    : 'rgba(245, 245, 245, 0.9)', // Semi-transparent light gray
+                  borderColor: isDarkMode ? '#8A2BE2' : '#E0E0E0',
+                }
+              ]}
             >
               {suggestions.map(suggestion => (
                 <TouchableOpacity
@@ -325,7 +336,11 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
                   }}
                   onPress={() => selectSuggestion(suggestion)}
                 >
-                  <Text style={{ color: isDarkMode ? '#F5F5F5' : '#333' }}>
+                  <Text style={{ 
+                    color: isDarkMode ? '#FFFFFF' : '#333333',
+                    fontSize: 14,
+                    fontWeight: '500'
+                  }}>
                     {suggestion.title} ({suggestion.year})
                   </Text>
                 </TouchableOpacity>
@@ -568,12 +583,10 @@ const styles = StyleSheet.create({
     top: 50,
     left: 0,
     right: 0,
-    backgroundColor: '#4B0082', // Will be overridden by isDarkMode
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#8A2BE2', // Will be overridden by isDarkMode
     zIndex: 10,
-    maxHeight: 200,
+    maxHeight: 180, // Reduced height so it doesn't cover too much of the screen
     elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -583,7 +596,7 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-start', // Changed from center to flex-start
+    justifyContent: 'flex-start',
     alignItems: 'center',
   },
   modalContainer: {
