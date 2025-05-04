@@ -67,6 +67,34 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
     };
   }, []);
 
+  // Helper function to calculate relevance score between movie title and search query
+  const calculateRelevance = (title, query) => {
+    if (!title || !query) return 0;
+    
+    const titleLower = title.toLowerCase();
+    const queryLower = query.toLowerCase();
+    
+    // Exact match gets highest score
+    if (titleLower === queryLower) return 100;
+    
+    // Title starts with query gets high score
+    if (titleLower.startsWith(queryLower)) return 90;
+    
+    // Title contains exact query gets medium-high score
+    if (titleLower.includes(queryLower)) return 80;
+    
+    // Check if title contains all words in query
+    const queryWords = queryLower.split(' ').filter(word => word.length > 1);
+    if (queryWords.every(word => titleLower.includes(word))) return 70;
+    
+    // Calculate how many words from the query are in the title
+    const matchingWords = queryWords.filter(word => titleLower.includes(word));
+    const matchRatio = matchingWords.length / queryWords.length;
+    
+    // Return score based on percentage of matching words (up to 60)
+    return Math.floor(matchRatio * 60);
+  };
+
   // Fetch suggestions as user types with debouncing
   const fetchSuggestions = useCallback(async (query) => {
     if (!query || query.length < 2) {
@@ -76,6 +104,7 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
     }
 
     try {
+      // Use a more permissive search query
       const response = await fetch(
         `https://api.themoviedb.org/3/search/movie?api_key=${API_KEY}&language=en-US&query=${encodeURIComponent(
           query
@@ -85,15 +114,40 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
       if (!response.ok) throw new Error('Failed to fetch suggestions');
 
       const data = await response.json();
-      // Take just top 5 results for suggestions
+      
       if (data.results && Array.isArray(data.results)) {
+        // Filter results that might be relevant (more inclusive filtering)
         const topSuggestions = data.results
-          .filter(m => m.poster_path)
-          .slice(0, 5)
+          .filter(m => {
+            // Include movies even if they don't have a poster
+            // Include movies that partially match the search query
+            const lowerTitle = m.title.toLowerCase();
+            const lowerQuery = query.toLowerCase();
+            return lowerTitle.includes(lowerQuery);
+          })
+          // For common terms like "the", sort by vote_count
+          .sort((a, b) => {
+            // If query is very generic (like "the"), prioritize by votes
+            if (query.toLowerCase() === "the" || 
+                query.toLowerCase() === "a" ||
+                query.length <= 3) {
+              return (b.vote_count || 0) - (a.vote_count || 0);
+            }
+            
+            // Otherwise, use relevance-based sorting
+            const aRelevance = calculateRelevance(a.title, query);
+            const bRelevance = calculateRelevance(b.title, query);
+            if (bRelevance !== aRelevance) return bRelevance - aRelevance;
+            
+            // Break ties with vote count
+            return (b.vote_count || 0) - (a.vote_count || 0);
+          })
+          .slice(0, 6) // Show more suggestions
           .map(m => ({
             id: m.id,
             title: m.title,
-            year: m.release_date ? new Date(m.release_date).getFullYear() : 'Unknown'
+            year: m.release_date ? new Date(m.release_date).getFullYear() : 'Unknown',
+            votes: m.vote_count || 0
           }));
         
         setSuggestions(topSuggestions);
@@ -128,7 +182,7 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
     };
   }, []);
 
-  // Search for movies
+  // Search for movies with improved relevance and vote count prioritization
   const searchMovies = useCallback(async () => {
     if (!searchQuery.trim()) return;
     
@@ -137,25 +191,66 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
     setError(null);
     
     try {
-      const response = await fetch(
+      // First try a direct search
+      const directResponse = await fetch(
         `https://api.themoviedb.org/3/search/movie?api_key=${API_KEY}&language=en-US&query=${encodeURIComponent(
           searchQuery
         )}&page=1&include_adult=false`
       );
       
-      if (!response.ok) {
+      if (!directResponse.ok) {
         throw new Error('Failed to search for movies');
       }
       
-      const data = await response.json();
+      const directData = await directResponse.json();
       
-      if (!data.results || !Array.isArray(data.results)) {
-        throw new Error('Invalid API response format');
+      // If we have few results, try a more permissive search
+      let results = directData.results || [];
+      
+      if (results.length < 3) {
+        // Try with partial matching, searching for each word separately
+        const words = searchQuery.split(' ').filter(word => word.length > 2);
+        
+        if (words.length > 1) {
+          // Try with the first significant word
+          const backupResponse = await fetch(
+            `https://api.themoviedb.org/3/search/movie?api_key=${API_KEY}&language=en-US&query=${encodeURIComponent(
+              words[0]
+            )}&page=1&include_adult=false`
+          );
+          
+          if (backupResponse.ok) {
+            const backupData = await backupResponse.json();
+            
+            if (backupData.results && Array.isArray(backupData.results)) {
+              // Filter these results to find ones that might match our query
+              const filteredBackupResults = backupData.results.filter(movie => {
+                const movieTitle = movie.title.toLowerCase();
+                const queryWords = searchQuery.toLowerCase().split(' ');
+                // Check if the movie title contains most of the query words
+                return queryWords.some(word => word.length > 2 && movieTitle.includes(word));
+              });
+              
+              // Add these to our results, avoiding duplicates
+              const existingIds = new Set(results.map(m => m.id));
+              filteredBackupResults.forEach(movie => {
+                if (!existingIds.has(movie.id)) {
+                  results.push(movie);
+                  existingIds.add(movie.id);
+                }
+              });
+            }
+          }
+        }
       }
       
-      // Filter for movies with posters, but allow movies already in seen/unseen lists
-      const filteredResults = data.results
-        .filter(m => m.poster_path)
+      if (!Array.isArray(results) || results.length === 0) {
+        throw new Error('No movies found matching your search');
+      }
+      
+      // Filter and process results
+      const filteredResults = results
+        // Prefer movies with posters but don't exclude those without
         .map(m => {
           // Check if movie is already in seen list
           const existingMovie = seen.find(sm => sm.id === m.id);
@@ -166,19 +261,31 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
             id: m.id,
             title: m.title,
             score: m.vote_average,
-            voteCount: m.vote_count,
-            poster: m.poster_path,
-            overview: m.overview,
+            voteCount: m.vote_count || 0,
+            poster: m.poster_path, // Can be null
+            overview: m.overview || "No overview available",
             release_date: m.release_date || 'Unknown',
-            genre_ids: m.genre_ids.slice(0, 3),
+            genre_ids: m.genre_ids?.slice(0, 3) || [],
             alreadyRated: !!existingMovie,
             currentRating: existingMovie ? existingMovie.userRating : null,
             inWatchlist: inWatchlist,
-            popularity: m.popularity || 0 // Add popularity for sorting
+            popularity: m.popularity || 0,
+            relevance: calculateRelevance(m.title, searchQuery) // Add relevance score
           };
         })
-        // Sort by popularity (highest first) to show most viewed movies first
-        .sort((a, b) => b.popularity - a.popularity || b.voteCount - a.voteCount);
+        // For common search terms, prioritize by vote count
+        .sort((a, b) => {
+          // If query is very generic (like "the"), prioritize by votes
+          if (searchQuery.toLowerCase() === "the" || 
+              searchQuery.toLowerCase() === "a" ||
+              searchQuery.length <= 3) {
+            return b.voteCount - a.voteCount;
+          }
+          
+          // Otherwise, sort by relevance first, then by votes
+          if (b.relevance !== a.relevance) return b.relevance - a.relevance;
+          return b.voteCount - a.voteCount;
+        });
       
       setSearchResults(filteredResults);
     } catch (err) {
@@ -196,7 +303,10 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
     setTimeout(searchMovies, 100); // Search after updating the input
   }, [searchMovies]);
 
-  const getPosterUrl = useCallback(path => `https://image.tmdb.org/t/p/w342${path}`, []);
+  const getPosterUrl = useCallback(path => {
+    if (!path) return 'https://via.placeholder.com/342x513?text=No+Poster'; // Fallback image
+    return `https://image.tmdb.org/t/p/w342${path}`;
+  }, []);
 
   // Open rating modal when user clicks "Seen It" or "Re-rate"
   const openRatingModal = useCallback((movie, isRerate = false) => {
@@ -341,7 +451,8 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
                     fontSize: 14,
                     fontWeight: '500'
                   }}>
-                    {suggestion.title} ({suggestion.year})
+                    {suggestion.title} ({suggestion.year}) 
+                    {suggestion.votes > 0 ? ` • ${suggestion.votes.toLocaleString()} votes` : ''}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -408,7 +519,7 @@ function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDa
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                   <Ionicons name="star" size={14} color={isDarkMode ? '#FFD700' : '#FFA000'} />
                   <Text style={{ color: isDarkMode ? '#FFD700' : '#FFA000', marginLeft: 4 }}>
-                    {item.score.toFixed(1)} ({item.voteCount} votes)
+                    {item.score.toFixed(1)} ({item.voteCount.toLocaleString()} votes)
                   </Text>
                 </View>
                 <Text style={[movieCardStyles.genresText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
