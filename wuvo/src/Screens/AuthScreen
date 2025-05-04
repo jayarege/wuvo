@@ -22,9 +22,10 @@ WebBrowser.maybeCompleteAuthSession();
 const { width, height } = Dimensions.get('window');
 
 // Replace these with your actual client IDs from Google Cloud Console
-const CLIENT_ID = "YOUR_WEB_CLIENT_ID";
+const CLIENT_ID = "258138577739-bomfeo1vd1egsktp6m2dqkj7qmb7oc16.apps.googleusercontent.com;"
 const ANDROID_CLIENT_ID = "YOUR_ANDROID_CLIENT_ID"; // Optional for now
-const IOS_CLIENT_ID = "YOUR_IOS_CLIENT_ID"; // The one you already created
+const IOS_CLIENT_ID = "258138577739-6dv2bim5gp8cpt0u7pmkdq67b5copbv3.apps.googleusercontent.com"
+; // The one you already created
 const EXPO_CLIENT_ID = CLIENT_ID; // Same as web client ID for Expo Go
 
 const AuthScreen = ({ onAuthenticate, isDarkMode }) => {
