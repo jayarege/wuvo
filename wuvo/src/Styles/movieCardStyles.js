@@ -1,7 +1,7 @@
 import { StyleSheet, Dimensions } from 'react-native';
 
 const { width } = Dimensions.get('window');
-const POSTER_WIDTH = width * 0.4;
+const POSTER_WIDTH = width * 0.35; // Slightly smaller to ensure it fits on screen
 const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
 
 const movieCardStyles = StyleSheet.create({
@@ -15,6 +15,7 @@ const movieCardStyles = StyleSheet.create({
     elevation: 3,
     overflow: 'hidden',
     marginBottom: 20,
+    maxWidth: width - 32, // Ensure it stays within screen bounds
   },
   moviePoster: {
     width: POSTER_WIDTH,
