@@ -1,37 +1,207 @@
-{
-  "name": "wuvo",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
-  },
-  "dependencies": {
-    "expo": "~50.0.0",
-    "expo-font": "~11.10.0",
-    "@expo/vector-icons": "^14.0.0",
-    "react-native-paper": "4.9.2",
-    "react-native-screens": "~3.29.0",
-    "@react-navigation/stack": "^6.3.20",
-    "@react-navigation/native": "^6.1.9",
-    "react-native-gesture-handler": "~2.14.0",
-    "@react-navigation/bottom-tabs": "^6.5.11",
-    "@react-native-community/slider": "4.4.3",
-    "react-native-safe-area-context": "4.8.2",
-    "@react-native-async-storage/async-storage": "1.21.0",
-    "expo-status-bar": "~1.11.1",
-    "expo-auth-session": "~5.4.0",
-    "expo-crypto": "~12.8.0",
-    "expo-web-browser": "~12.8.2",
-    "expo-linking": "~6.2.2",
-    "expo-constants": "~15.4.5",
-    "react": "18.2.0",
-    "react-native": "0.73.4"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.20.0"
-  },
-  "private": true
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  TextInput,
+  Image
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import layoutStyles from '../../Styles/layoutStyles';
+import headerStyles from '../../Styles/headerStyles';
+
+function AuthScreen({ onAuthenticate, isDarkMode }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleLogin = useCallback(() => {
+    setIsLoading(true);
+    setError(null);
+    
+    // For demo, just simulate a login delay
+    setTimeout(() => {
+      setIsLoading(false);
+      
+      // Demo authentication - in a real app, you would validate credentials
+      onAuthenticate({
+        id: 'user-123',
+        email: email || 'demo@example.com',
+        name: 'Demo User'
+      });
+    }, 1500);
+  }, [email, onAuthenticate]);
+
+  const handleDemoLogin = useCallback(() => {
+    setIsLoading(true);
+    
+    // Just use the demo login directly
+    setTimeout(() => {
+      setIsLoading(false);
+      onAuthenticate({
+        id: 'demo-user',
+        email: 'demo@example.com',
+        name: 'Demo User'
+      });
+    }, 1000);
+  }, [onAuthenticate]);
+
+  return (
+    <SafeAreaView style={[layoutStyles.safeArea, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
+      <View style={[styles.container, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
+        <View style={styles.logoContainer}>
+          <Text style={[styles.appTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}>
+            Wuvo
+          </Text>
+          <Text style={[styles.appTagline, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
+            Movies you'll love, ranked your way
+          </Text>
+        </View>
+        
+        <View style={styles.formContainer}>
+          <TextInput
+            style={[
+              styles.input,
+              { 
+                backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5',
+                color: isDarkMode ? '#F5F5F5' : '#333',
+                borderColor: isDarkMode ? '#8A2BE2' : '#E0E0E0' 
+              }
+            ]}
+            placeholder="Email"
+            placeholderTextColor={isDarkMode ? '#A9A9A9' : '#999'}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          
+          <TextInput
+            style={[
+              styles.input,
+              { 
+                backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5',
+                color: isDarkMode ? '#F5F5F5' : '#333',
+                borderColor: isDarkMode ? '#8A2BE2' : '#E0E0E0' 
+              }
+            ]}
+            placeholder="Password"
+            placeholderTextColor={isDarkMode ? '#A9A9A9' : '#999'}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+          
+          {error && (
+            <Text style={styles.errorText}>
+              {error}
+            </Text>
+          )}
+          
+          <TouchableOpacity
+            style={[
+              styles.loginButton,
+              { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082' }
+            ]}
+            onPress={handleLogin}
+            disabled={isLoading}
+          >
+            <Text style={[
+              styles.loginButtonText,
+              { color: isDarkMode ? '#1C2526' : '#FFFFFF' }
+            ]}>
+              {isLoading ? 'Logging in...' : 'Log In'}
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.demoButton}
+            onPress={handleDemoLogin}
+            disabled={isLoading}
+          >
+            <Text style={[
+              styles.demoButtonText,
+              { color: isDarkMode ? '#FFD700' : '#4B0082' }
+            ]}>
+              Try Demo Mode
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.footer}>
+          <Text style={[styles.footerText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
+            Rate movies and discover new favorites
+          </Text>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'center',
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  appTitle: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  appTagline: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  formContainer: {
+    marginBottom: 30,
+  },
+  input: {
+    height: 50,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    fontSize: 16,
+  },
+  errorText: {
+    color: '#FF3B30',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  loginButton: {
+    height: 50,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  demoButton: {
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  demoButtonText: {
+    fontSize: 16,
+  },
+  footer: {
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+});
+
+export default AuthScreen;
