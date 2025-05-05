@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  Image, 
-  TouchableOpacity, 
-  ActivityIndicator, 
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
   SafeAreaView,
   Modal,
   ScrollView,
@@ -71,8 +71,13 @@ const baselineMovies = [
   { id: 857, title: "Saving Private Ryan" },
   { id: 745, title: "The Sixth Sense" },
   { id: 289, title: "Casablanca" }
-  // This is a larger set of 40 baseline movies, but you can add more
 ];
+
+// Remove duplicates from baseline movies
+const uniqueBaselineMovies = Array.from(new Set(baselineMovies.map(m => m.id)))
+  .map(id => {
+    return baselineMovies.find(m => m.id === id);
+  });
 
 function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, genres, isDarkMode }) {
   const [seenMovie, setSeenMovie] = useState(null);
@@ -87,7 +92,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
   const [selectedGenre, setSelectedGenre] = useState(null);
   const [tempGenre, setTempGenre] = useState(null);
   const [comparisonCount, setComparisonCount] = useState(0);
-  const [comparisonPattern, setComparisonPattern] = useState(0); // 0-3: tracks where we are in the pattern
+  const [comparisonPattern, setComparisonPattern] = useState(0); // 0-4: tracks where we are in the pattern
   const isLoadingRef = useRef(false);
 
   // Load compared movies and other state from storage on initial load
@@ -187,7 +192,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
   // Get next baseline movie to compare
   const getNextBaselineMovie = useCallback(() => {
     // Find remaining baseline movies (not yet compared)
-    const remainingBaselineMovies = baselineMovies.filter(
+    const remainingBaselineMovies = uniqueBaselineMovies.filter(
       m => !comparedMovies.includes(m.id) && !seen.some(sm => sm.id === m.id)
     );
     
@@ -214,7 +219,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     setComparisonCount(prev => prev + 1);
     
     // Update comparison pattern
-    setComparisonPattern(prev => (prev + 1) % 4); // 0,1,2,3,0,1,2,3,...
+    setComparisonPattern(prev => (prev + 1) % 5); // 0,1,2,3,4,0,1,2,3,4,...
   }, [comparedMovies]);
 
   // Get movie details from TMDB API
@@ -315,8 +320,8 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
       apiUrl += `&with_genres=${selectedGenre}`;
     }
     
-    // Add random page (1-5) to get more variety
-    const page = Math.floor(Math.random() * 5) + 1;
+    // Add random page (1-10) to get more variety
+    const page = Math.floor(Math.random() * 10) + 1;
     apiUrl += `&page=${page}`;
     
     // Fetch similar movies
@@ -332,18 +337,66 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
       throw new Error('No similar movies found');
     }
     
-    // Filter out movies already seen, in watchlist, or already compared
+    // Create a set of all IDs we want to exclude
+    const excludedIds = new Set();
+    
+    // Add all movies we've already seen
+    seen.forEach(movie => excludedIds.add(movie.id));
+    
+    // Add all movies in the watchlist
+    unseen.forEach(movie => excludedIds.add(movie.id));
+    
+    // Add all movies we've already compared
+    comparedMovies.forEach(id => excludedIds.add(id));
+    
+    // Filter out movies already seen, in watchlist, already compared, or without posters
     const filteredResults = data.results.filter(
       m =>
         m.poster_path &&
         m.vote_average >= MIN_SCORE &&
-        !seen.some(sm => sm.id === m.id) &&
-        !unseen.some(um => um.id === m.id) &&
-        !comparedMovies.includes(m.id)
+        !excludedIds.has(m.id)
     );
     
     if (filteredResults.length === 0) {
-      throw new Error('No new similar movies found');
+      // If no movies found, try a different approach - search for popular movies
+      const popularApiUrl = `https://api.themoviedb.org/3/movie/popular?api_key=${API_KEY}&language=en-US&page=${Math.floor(Math.random() * 20) + 1}`;
+      
+      const popularResponse = await fetch(popularApiUrl);
+      
+      if (!popularResponse.ok) {
+        throw new Error('Failed to fetch popular movies');
+      }
+      
+      const popularData = await popularResponse.json();
+      
+      // Filter again
+      const popularFiltered = popularData.results.filter(
+        m =>
+          m.poster_path &&
+          !excludedIds.has(m.id)
+      );
+      
+      if (popularFiltered.length === 0) {
+        throw new Error('No new movies found to compare. Try rating more movies first.');
+      }
+      
+      // Pick a random movie from the filtered popular results
+      const randomMovie = popularFiltered[Math.floor(Math.random() * popularFiltered.length)];
+      
+      // Format the movie data
+      return {
+        id: randomMovie.id,
+        title: randomMovie.title,
+        score: randomMovie.vote_average,
+        voteCount: randomMovie.vote_count,
+        poster: randomMovie.poster_path,
+        overview: randomMovie.overview,
+        release_date: randomMovie.release_date || 'Unknown',
+        genre_ids: randomMovie.genre_ids.slice(0, 3),
+        release_year: new Date(randomMovie.release_date).getFullYear(),
+        eloRating: randomMovie.vote_average * 10,
+        userRating: randomMovie.vote_average
+      };
     }
     
     // Pick a random movie from the filtered results
@@ -360,8 +413,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
       release_date: randomMovie.release_date || 'Unknown',
       genre_ids: randomMovie.genre_ids.slice(0, 3),
       release_year: new Date(randomMovie.release_date).getFullYear(),
-      // Use TMDB score directly as the starting rating
-      eloRating: randomMovie.vote_average * 10, // Convert to 0-100 scale
+      eloRating: randomMovie.vote_average * 10,
       userRating: randomMovie.vote_average
     };
   }, [seen, unseen, selectedGenre, comparedMovies]);
@@ -387,11 +439,16 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     // Get two different random movies from user's seen list
     const shuffled = [...eligibleMovies].sort(() => 0.5 - Math.random());
     
-    // Return the pair
-    return {
-      seenMovie: shuffled[0],
-      newSeenMovie: shuffled[1]
-    };
+    // Make sure we're not comparing a movie with itself
+    if (shuffled.length >= 2) {
+      // Return two different movies
+      return {
+        seenMovie: shuffled[0],
+        newSeenMovie: shuffled[1]
+      };
+    } else {
+      throw new Error('Not enough different movies for comparison');
+    }
   }, [seen, selectedGenre]);
 
   // Fetch random movie from baseline or recommendations
@@ -415,13 +472,19 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
 
     try {
       // Determine what type of comparison to show based on the pattern:
-      // 0, 1, 2: Known vs Unknown
-      // 3: Known vs Known
-      const isKnownVsKnown = comparisonPattern === 3;
+      // 0,1,2,3: Known vs Unknown
+      // 4: Known vs Known
+      const isKnownVsKnown = comparisonPattern === 4;
       
       if (isKnownVsKnown && seen.length >= 5) {
         // Get a comparison between two already-seen movies
         const { seenMovie: movieA, newSeenMovie: movieB } = await getKnownVsKnownPair();
+        
+        // Ensure we have two different movies
+        if (movieA.id === movieB.id) {
+          throw new Error('Cannot compare a movie with itself');
+        }
+        
         setSeenMovie(movieA);
         setNewMovie(movieB);
         setLoading(false);
@@ -460,15 +523,32 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
         
         if (nextBaselineMovie) {
           console.log('Using baseline movie:', nextBaselineMovie.title);
-          newMovieData = await getMovieDetails(nextBaselineMovie.id);
+          
+          // Ensure we're not comparing the same movie from the baseline
+          if (nextBaselineMovie.id === randomSeenMovie.id) {
+            // Try to get another baseline movie
+            const remainingBaselineMovies = uniqueBaselineMovies.filter(
+              m => !comparedMovies.includes(m.id) && !seen.some(sm => sm.id === m.id) && m.id !== randomSeenMovie.id
+            );
+            
+            if (remainingBaselineMovies.length > 0) {
+              const alternativeMovie = remainingBaselineMovies[Math.floor(Math.random() * remainingBaselineMovies.length)];
+              newMovieData = await getMovieDetails(alternativeMovie.id);
+            } else {
+              // Fall back to recommendation algorithm
+              newMovieData = await getSimilarMovie();
+            }
+          } else {
+            newMovieData = await getMovieDetails(nextBaselineMovie.id);
+          }
           
           // Check baseline completion - only after majority of baseline movies
-          const remainingCount = baselineMovies.filter(m => 
+          const remainingCount = uniqueBaselineMovies.filter(m => 
             !comparedMovies.includes(m.id) && !seen.some(sm => sm.id === m.id)
           ).length;
           
           // Only mark baseline complete when 85% or more are rated
-          if (remainingCount <= Math.floor(baselineMovies.length * 0.15)) {
+          if (remainingCount <= Math.floor(uniqueBaselineMovies.length * 0.15)) {
             // This is near the end of baseline movies, prepare to show completion notice
             setTimeout(() => {
               setBaselineComplete(true);
@@ -485,6 +565,11 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
         // Already completed baseline, use recommendation algorithm
         console.log('Using recommendation algorithm');
         newMovieData = await getSimilarMovie();
+      }
+      
+      // Make sure we didn't end up with the same movie somehow
+      if (newMovieData && newMovieData.id === randomSeenMovie.id) {
+        throw new Error('Cannot compare a movie with itself');
       }
       
       setNewMovie(newMovieData);
@@ -507,7 +592,8 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     getNextBaselineMovie,
     getMovieDetails, 
     getSimilarMovie,
-    getKnownVsKnownPair
+    getKnownVsKnownPair,
+    uniqueBaselineMovies
   ]);
 
   // Initial fetch on component mount
@@ -631,7 +717,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     }
     
     // Check if this is a known vs known comparison
-    const isKnownVsKnown = comparisonPattern === 3 && seen.some(m => m.id === newMovie.id);
+    const isKnownVsKnown = comparisonPattern === 4 && seen.some(m => m.id === newMovie.id);
     
     if (isKnownVsKnown) {
       // For known vs known, just adjust the ratings directly in the seen list
@@ -667,7 +753,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
       );
       
       // Add new movie to seen list
-      setSeen([...updatedSeen, updatedNewMovie]);
+      onAddToSeen(updatedNewMovie);
       
       // Save the action for potential undo
       setLastAction({
@@ -683,7 +769,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     setSeenMovie(null);
     setLoading(true);
     fetchRandomMovie();
-  }, [seenMovie, newMovie, seen, setSeen, adjustRating, fetchRandomMovie, markMovieAsCompared, comparisonPattern]);
+  }, [seenMovie, newMovie, seen, setSeen, adjustRating, fetchRandomMovie, markMovieAsCompared, comparisonPattern, onAddToSeen]);
 
   // Handle user choosing the new movie as better
   const handleNewWin = useCallback(() => {
@@ -693,7 +779,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     }
     
     // Check if this is a known vs known comparison
-    const isKnownVsKnown = comparisonPattern === 3 && seen.some(m => m.id === newMovie.id);
+    const isKnownVsKnown = comparisonPattern === 4 && seen.some(m => m.id === newMovie.id);
     
     if (isKnownVsKnown) {
       // For known vs known, just adjust the ratings directly in the seen list
@@ -729,7 +815,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
       );
       
       // Add new movie to seen list
-      setSeen([...updatedSeen, updatedNewMovie]);
+      onAddToSeen(updatedNewMovie);
       
       // Save the action for potential undo
       setLastAction({
@@ -745,7 +831,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     setSeenMovie(null);
     setLoading(true);
     fetchRandomMovie();
-  }, [seenMovie, newMovie, seen, setSeen, adjustRating, fetchRandomMovie, markMovieAsCompared, comparisonPattern]);
+  }, [seenMovie, newMovie, seen, setSeen, adjustRating, fetchRandomMovie, markMovieAsCompared, comparisonPattern, onAddToSeen]);
 
   // Handle user hasn't seen the new movie
   const handleUnseen = useCallback(() => {
@@ -755,7 +841,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     }
     
     // Check if this is a known vs known comparison
-    const isKnownVsKnown = comparisonPattern === 3 && seen.some(m => m.id === newMovie.id);
+    const isKnownVsKnown = comparisonPattern === 4 && seen.some(m => m.id === newMovie.id);
     
     if (isKnownVsKnown) {
       // Cannot mark a known movie as unseen, show an alert
@@ -794,7 +880,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     }
     
     // Always mark the unknown movie as compared, even in Known vs Known mode
-    if (comparisonPattern !== 3 || !seen.some(m => m.id === newMovie.id)) {
+    if (comparisonPattern !== 4 || !seen.some(m => m.id === newMovie.id)) {
       markMovieAsCompared(newMovie.id);
     }
     
@@ -803,7 +889,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
       type: 'skip',
       seenMovie: {...seenMovie},
       newMovie: {...newMovie},
-      isKnownVsKnown: comparisonPattern === 3 && seen.some(m => m.id === newMovie.id)
+      isKnownVsKnown: comparisonPattern === 4 && seen.some(m => m.id === newMovie.id)
     });
     
     // Just fetch a new comparison
@@ -821,7 +907,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     }
     
     // Check if this is a known vs known comparison
-    const isKnownVsKnown = comparisonPattern === 3 && seen.some(m => m.id === newMovie.id);
+    const isKnownVsKnown = comparisonPattern === 4 && seen.some(m => m.id === newMovie.id);
     
     if (isKnownVsKnown) {
       // For known vs known, calculate the average rating and apply to both
@@ -919,7 +1005,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
       );
       
       // Add new movie to seen list
-      setSeen([...updatedSeen, updatedNewMovie]);
+      onAddToSeen(updatedNewMovie);
     }
     
     // Fetch the next comparison
@@ -927,7 +1013,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
     setSeenMovie(null);
     setLoading(true);
     fetchRandomMovie();
-  }, [seenMovie, newMovie, seen, setSeen, fetchRandomMovie, markMovieAsCompared, comparisonPattern]);
+  }, [seenMovie, newMovie, seen, setSeen, fetchRandomMovie, markMovieAsCompared, comparisonPattern, onAddToSeen]);
 
   // Handle undo last action
   const handleUndo = useCallback(() => {
@@ -956,7 +1042,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
         setComparisonCount(prev => Math.max(0, prev - 1));
         
         // Roll back comparison pattern
-        setComparisonPattern(prev => (prev - 1 + 4) % 4); // 3,2,1,0,3,2,...
+        setComparisonPattern(prev => (prev - 1 + 5) % 5); // 4,3,2,1,0,4,3,...
         
         // Restore the movies for a new comparison
         setSeenMovie(lastAction.seenMovie);
@@ -975,7 +1061,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
         setSeen(restoredSeen);
         
         // Roll back comparison pattern
-        setComparisonPattern(prev => (prev - 1 + 4) % 4); // 3,2,1,0,3,2,...
+        setComparisonPattern(prev => (prev - 1 + 5) % 5); // 4,3,2,1,0,4,3,...
         
         // Restore the movies for a new comparison
         setSeenMovie(lastAction.seenMovie);
@@ -995,7 +1081,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
         setComparisonCount(prev => Math.max(0, prev - 1));
         
         // Roll back comparison pattern
-        setComparisonPattern(prev => (prev - 1 + 4) % 4); // 3,2,1,0,3,2,...
+        setComparisonPattern(prev => (prev - 1 + 5) % 5); // 4,3,2,1,0,4,3,...
         
         // Restore the movie for comparison
         setNewMovie(lastAction.movie);
@@ -1012,7 +1098,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
         }
         
         // Roll back comparison pattern
-        setComparisonPattern(prev => (prev - 1 + 4) % 4); // 3,2,1,0,3,2,...
+        setComparisonPattern(prev => (prev - 1 + 5) % 5); // 4,3,2,1,0,4,3,...
         
         // Restore the movies for comparison
         setSeenMovie(lastAction.seenMovie);
@@ -1050,7 +1136,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
         }
         
         // Roll back comparison pattern
-        setComparisonPattern(prev => (prev - 1 + 4) % 4); // 3,2,1,0,3,2,...
+        setComparisonPattern(prev => (prev - 1 + 5) % 5); // 4,3,2,1,0,4,3,...
         
         // Restore the movies for comparison
         setSeenMovie(lastAction.seenMovie);
@@ -1093,7 +1179,7 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
           </Text>
           <Text style={[styles.progressText, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
             {!baselineComplete ? 
-              `Progress: ${Math.min(comparedMovies.length, baselineMovies.length)}/${baselineMovies.length} movies` :
+              `Progress: ${Math.min(comparedMovies.length, uniqueBaselineMovies.length)}/${uniqueBaselineMovies.length} movies` :
               'Custom recommendations enabled'
             }
           </Text>
@@ -1113,531 +1199,86 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
           </Text>
           <Text style={[stateStyles.errorSubText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
             {seen.length < 3 ? 'Go to the Add Movie tab to rate more movies.' : 'This may be temporary. Try again or select a different genre.'}
-         </Text>
-         <TouchableOpacity
-           style={[stateStyles.retryButton, { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082' }]}
-           onPress={handleRetry}
-           activeOpacity={0.7}
-         >
-           <Text style={[stateStyles.retryButtonText, { color: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
-             Try Again
-           </Text>
-         </TouchableOpacity>
-       </View>
-     </SafeAreaView>
-   );
- }
+          </Text>
+          <TouchableOpacity
+            style={[stateStyles.retryButton, { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082' }]}
+            onPress={handleRetry}
+            activeOpacity={0.7}
+          >
+            <Text style={[stateStyles.retryButtonText, { color: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
+              Try Again
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
- if (!seenMovie || !newMovie) return null;
+  if (!seenMovie || !newMovie) return null;
 
- // Check if this is a known vs known comparison
- const isKnownVsKnown = comparisonPattern === 3 && seen.some(m => m.id === newMovie.id);
+  // Check if this is a known vs known comparison
+  const isKnownVsKnown = comparisonPattern === 4 && seen.some(m => m.id === newMovie.id);
 
- // Main UI
- return (
-   <SafeAreaView style={[layoutStyles.safeArea, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
-     <View
-       style={[
-         headerStyles.screenHeader,
-         { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5', borderBottomColor: isDarkMode ? '#8A2BE2' : '#E0E0E0' },
-       ]}
-     >
-       <Text style={[headerStyles.screenTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}>
-         {isKnownVsKnown ? 'Compare Your Ratings' : 
-           baselineComplete ? 'Movie Recommendations' : 'Movie Ratings'}
-       </Text>
-       <View style={styles.actionRow}>
-         {!baselineComplete && !isKnownVsKnown && (
-           <View style={styles.progressBadge}>
-             <Text style={styles.progressBadgeText}>
-               {Math.min(comparedMovies.length, baselineMovies.length)}/{baselineMovies.length}
-             </Text>
-           </View>
-         )}
-         {lastAction && (
-           <TouchableOpacity
-             style={styles.actionButton}
-             onPress={handleUndo}
-             activeOpacity={0.7}
-           >
-             <Ionicons name="arrow-undo" size={24} color={isDarkMode ? '#FFD700' : '#4B0082'} />
-           </TouchableOpacity>
-         )}
-         <TouchableOpacity
-           style={styles.actionButton}
-           onPress={openFilterModal}
-           activeOpacity={0.7}
-         >
-           <Ionicons name="filter" size={24} color={isDarkMode ? '#FFD700' : '#4B0082'} />
-           {selectedGenre && (
-             <View style={styles.filterBadge} />
-           )}
-         </TouchableOpacity>
-       </View>
-     </View>
+  // Main UI
+  return (
+    <SafeAreaView style={[layoutStyles.safeArea, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
+      <View
+        style={[
+          headerStyles.screenHeader,
+          { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5', borderBottomColor: isDarkMode ? '#8A2BE2' : '#E0E0E0' },
+        ]}
+      >
+        <Text style={[headerStyles.screenTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}>
+          {isKnownVsKnown ? 'Compare Your Ratings' : 
+            baselineComplete ? 'Movie Recommendations' : 'Movie Ratings'}
+        </Text>
+        <View style={styles.actionRow}>
+          {!baselineComplete && !isKnownVsKnown && (
+            <View style={styles.progressBadge}>
+              <Text style={styles.progressBadgeText}>
+                {Math.min(comparedMovies.length, uniqueBaselineMovies.length)}/{uniqueBaselineMovies.length}
+              </Text>
+            </View>
+          )}
+          {lastAction && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleUndo}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-undo" size={24} color={isDarkMode ? '#FFD700' : '#4B0082'} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={openFilterModal}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="filter" size={24} color={isDarkMode ? '#FFD700' : '#4B0082'} />
+            {selectedGenre && (
+              <View style={styles.filterBadge} />
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
 
-     <View style={[compareStyles.compareContainer, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
-       <View style={compareStyles.compareContent}>
-         <Text style={[compareStyles.compareTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}>
-           {isKnownVsKnown ? 'Which movie do you prefer?' : 'Which movie was better?'}
-         </Text>
-         <View style={compareStyles.compareMovies}>
-           <TouchableOpacity
-             style={[compareStyles.posterContainer, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5' }]}
-             onPress={handleSeenWin}
-             activeOpacity={0.7}
-           >
-             <Image
-               source={{ uri: getPosterUrl(seenMovie.poster) }}
-               style={compareStyles.poster}
-               resizeMode="cover"
-             />
-             <View style={compareStyles.posterOverlay}>
-               <Text
-                 style={[movieCardStyles.movieTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}
-                 numberOfLines={2}
-               >
-                 {seenMovie.title}
-               </Text>
-               <Text style={[compareStyles.ratingTag, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
-                 Your rating: {seenMovie.userRating.toFixed(1)}
-               </Text>
-               <Text style={[movieCardStyles.genresText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-                 {seenMovie.genre_ids.map(id => genres[id] || 'Unknown').join(', ')}
-               </Text>
-             </View>
-           </TouchableOpacity>
-
-           <View style={compareStyles.vsContainer}>
-             <Text style={[compareStyles.vsText, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
-               VS
-             </Text>
-           </View>
-
-           <TouchableOpacity
-             style={[compareStyles.posterContainer, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5' }]}
-             onPress={handleNewWin}
-             activeOpacity={0.7}
-           >
-             <Image
-               source={{ uri: getPosterUrl(newMovie.poster) }}
-               style={compareStyles.poster}
-               resizeMode="cover"
-             />
-             <View style={compareStyles.posterOverlay}>
-               <Text
-                 style={[movieCardStyles.movieTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}
-                 numberOfLines={2}
-               >
-                 {newMovie.title}
-               </Text>
-               {isKnownVsKnown ? (
-                 <Text style={[compareStyles.ratingTag, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
-                   Your rating: {newMovie.userRating.toFixed(1)}
-                 </Text>
-               ) : (
-                 <Text style={[compareStyles.ratingTag, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
-                   TMDb: {newMovie.score.toFixed(1)} ({newMovie.voteCount} votes)
-                 </Text>
-               )}
-               <Text style={[movieCardStyles.genresText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-                 {newMovie.genre_ids.map(id => genres[id] || 'Unknown').join(', ')}
-               </Text>
-             </View>
-           </TouchableOpacity>
-         </View>
-
-         <View style={compareStyles.actionButtons}>
-           <TouchableOpacity
-             style={[
-               compareStyles.toughButton, 
-               { 
-                 backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5', 
-                 borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' 
-               }
-             ]}
-             onPress={handleToughChoice}
-             activeOpacity={0.7}
-           >
-             <Text style={[compareStyles.toughButtonText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-               Too tough to decide
-             </Text>
-           </TouchableOpacity>
-
-           {!isKnownVsKnown && (
-             <TouchableOpacity
-               style={[compareStyles.unseenButton, { backgroundColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
-               onPress={handleUnseen}
-               activeOpacity={0.7}
-             >
-               <Text style={[compareStyles.unseenButtonText, { color: isDarkMode ? '#F5F5F5' : '#FFFFFF' }]}>
-                 Add to watchlist
-               </Text>
-             </TouchableOpacity>
-           )}
-
-           <TouchableOpacity
-             style={[buttonStyles.skipButton, { borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
-             onPress={handleSkip}
-             activeOpacity={0.7}
-           >
-             <Text style={[buttonStyles.skipButtonText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-               Skip
-             </Text>
-           </TouchableOpacity>
-         </View>
-       </View>
-     </View>
-     
-     {/* Filter Modal */}
-     <Modal
-       visible={filterModalVisible}
-       transparent
-       animationType="fade"
-       onRequestClose={cancelFilters}
-     >
-       <View style={[modalStyles.modalOverlay, styles.modalOverlay]}>
-         <View style={[
-           modalStyles.modalContent,
-           styles.modalContent,
-           { backgroundColor: isDarkMode ? '#4B0082' : '#FFFFFF' }
-         ]}>
-           <Text style={[
-             modalStyles.modalTitle,
-             { color: isDarkMode ? '#F5F5F5' : '#333' }
-           ]}>
-             Filter Movies
-           </Text>
-           
-           {/* Feature Description */}
-           <View style={styles.infoSection}>
-             <Text style={[
-               styles.infoText,
-               { color: isDarkMode ? '#FFD700' : '#4B0082', fontWeight: 'bold' }
-             ]}>
-               {baselineComplete ? 'Personalized Recommendations' : 'Movie Rating System'}
-             </Text>
-             <Text style={[
-               styles.infoSubtext,
-               { color: isDarkMode ? '#D3D3D3' : '#666' }
-             ]}>
-               {baselineComplete 
-                 ? 'Movies shown are recommended based on your taste and preferences from previous ratings.'
-                 : `You've rated ${Math.min(comparedMovies.length, baselineMovies.length)} out of ${baselineMovies.length} baseline movies. After completing the baseline, recommendations will be tailored to your taste.`
-               }
-             </Text>
-           </View>
-           
-           {/* Genre Filter */}
-           <View style={styles.filterSection}>
-             <Text style={[
-               styles.sectionTitle,
-               { color: isDarkMode ? '#F5F5F5' : '#333' }
-             ]}>
-               Filter by Genre
-             </Text>
-             
-             <TouchableOpacity
-               style={[
-                 styles.genreButton,
-                 { 
-                   backgroundColor: tempGenre === null 
-                     ? (isDarkMode ? '#8A2BE2' : '#4B0082') 
-                     : 'transparent',
-                   borderColor: isDarkMode ? '#8A2BE2' : '#4B0082'
-                 }
-               ]}
-               onPress={() => setTempGenre(null)}
-             >
-               <Text style={[
-                 styles.genreButtonText,
-                 { 
-                   color: tempGenre === null 
-                     ? '#FFFFFF' 
-                     : (isDarkMode ? '#D3D3D3' : '#666')
-                 }
-               ]}>
-                 All Genres
-               </Text>
-             </TouchableOpacity>
-             
-             <ScrollView 
-               horizontal
-               showsHorizontalScrollIndicator={false}
-               contentContainerStyle={styles.genreScrollContent}
-             >
-               {Object.entries(genres)
-                 .filter(([id, name]) => name) // Filter out undefined genres
-                 .map(([id, name]) => (
-                   <TouchableOpacity
-                     key={id}
-                     style={[
-                       styles.genreButton,
-                       { 
-                         backgroundColor: tempGenre === id 
-                           ? (isDarkMode ? '#8A2BE2' : '#4B0082') 
-                           : 'transparent',
-                         borderColor: isDarkMode ? '#8A2BE2' : '#4B0082'
-                       }
-                     ]}
-                     onPress={() => setTempGenre(id)}
-                   >
-                     <Text style={[
-                       styles.genreButtonText,
-                       { 
-                         color: tempGenre === id 
-                           ? '#FFFFFF' 
-                           : (isDarkMode ? '#D3D3D3' : '#666')
-                       }
-                     ]}>
-                       {name}
+      <View style={[compareStyles.compareContainer, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
+        <View style={compareStyles.compareContent}>
+          <Text style={[compareStyles.compareTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}>
+            {isKnownVsKnown ? 'Which movie do you prefer?' : 'Which movie was better?'}
+          </Text>
+          <View style={compareStyles.compareMovies}>
+            <TouchableOpacity
+              style={[compareStyles.posterContainer, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5' }]}
+              onPress={handleSeenWin}
+              activeOpacity={0.7}
+            >
+              <Image
+                source={{ uri: getPosterUrl(seenMovie.poster) }}
+                style={compareStyles.poster}
+                resizeMode="cover"
+              />
+              <View style={compareStyles.posterOverlay}>
+                <Text
+                  style={[movieCardStyles.movieTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}
                      </Text>
-                   </TouchableOpacity>
-                 ))
-               }
-             </ScrollView>
-           </View>
-           
-           {/* Action Buttons */}
-           <View style={styles.modalButtons}>
-             <TouchableOpacity
-               style={[
-                 styles.applyButton,
-                 { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082' }
-               ]}
-               onPress={applyFilters}
-             >
-               <Text style={[
-                 styles.applyButtonText,
-                 { color: isDarkMode ? '#4B0082' : '#FFFFFF' }
-               ]}>
-                 Apply Filters
-               </Text>
-             </TouchableOpacity>
-             <TouchableOpacity
-               style={[
-                 styles.cancelButton,
-                 { borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }
-               ]}
-               onPress={cancelFilters}
-             >
-               <Text style={[
-                 styles.cancelButtonText,
-                 { color: isDarkMode ? '#D3D3D3' : '#666' }
-               ]}>
-                 Cancel
-               </Text>
-             </TouchableOpacity>
-           </View>
-         </View>
-       </View>
-     </Modal>
-     
-     {/* Baseline Complete Modal */}
-     <Modal
-       visible={showBaselineCompleteModal}
-       transparent
-       animationType="fade"
-       onRequestClose={handleBaselineCompleteAcknowledge}
-     >
-       <View style={[modalStyles.modalOverlay, styles.modalOverlay]}>
-         <View style={[
-           modalStyles.modalContent,
-           styles.modalContent,
-           { backgroundColor: isDarkMode ? '#4B0082' : '#FFFFFF' }
-         ]}>
-           <Ionicons 
-             name="checkmark-circle" 
-             size={64} 
-             color={isDarkMode ? '#FFD700' : '#4B0082'} 
-             style={styles.successIcon}
-           />
-           
-           <Text style={[
-             modalStyles.modalTitle,
-             { color: isDarkMode ? '#FFD700' : '#4B0082', fontSize: 24 }
-           ]}>
-             Baseline Complete!
-           </Text>
-           
-           <Text style={[
-             styles.completionText,
-             { color: isDarkMode ? '#F5F5F5' : '#333' }
-           ]}>
-             You've rated enough baseline movies to build your preference profile!
-           </Text>
-           
-           <Text style={[
-             styles.completionSubtext,
-             { color: isDarkMode ? '#D3D3D3' : '#666' }
-           ]}>
-             From now on, movies will be recommended based on your personal preferences. The more movies you rate, the better your recommendations will become.
-           </Text>
-           
-           <TouchableOpacity
-             style={[
-               styles.continueButton,
-               { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082' }
-             ]}
-             onPress={handleBaselineCompleteAcknowledge}
-           >
-             <Text style={[
-               styles.continueButtonText,
-               { color: isDarkMode ? '#4B0082' : '#FFFFFF' }
-             ]}>
-               Continue to Recommendations
-             </Text>
-           </TouchableOpacity>
-         </View>
-       </View>
-     </Modal>
-   </SafeAreaView>
- );
-}
-
-const styles = StyleSheet.create({
- actionRow: {
-   flexDirection: 'row',
-   alignItems: 'center',
- },
- actionButton: {
-   marginLeft: 16,
-   padding: 4,
-   position: 'relative',
- },
- filterBadge: {
-   position: 'absolute',
-   top: 0,
-   right: 0,
-   width: 8,
-   height: 8,
-   borderRadius: 4,
-   backgroundColor: '#FF9500',
- },
- modalOverlay: {
-   justifyContent: 'center',
-   alignItems: 'center',
-   zIndex: 1000,
- },
- modalContent: {
-   width: '90%',
-   maxHeight: '80%',
-   elevation: 10,
-   shadowOpacity: 0.5,
-   zIndex: 1001,
- },
- infoSection: {
-   backgroundColor: 'rgba(255,255,255,0.08)',
-   padding: 16,
-   borderRadius: 8,
-   marginBottom: 24,
- },
- infoText: {
-   fontSize: 16,
-   marginBottom: 8,
- },
- infoSubtext: {
-   fontSize: 14,
-   lineHeight: 20,
- },
- filterSection: {
-   marginBottom: 20,
- },
- sectionTitle: {
-   fontSize: 16,
-   fontWeight: '600',
-   marginBottom: 12,
- },
- genreScrollContent: {
-   flexDirection: 'row',
-   paddingVertical: 8,
- },
- genreButton: {
-   paddingVertical: 8,
-   paddingHorizontal: 12,
-   borderRadius: 16,
-   borderWidth: 1,
-   marginRight: 8,
-   minWidth: 80,
-   alignItems: 'center',
- },
- genreButtonText: {
-   fontSize: 14,
-   fontWeight: '500',
- },
- modalButtons: {
-   flexDirection: 'row',
-   justifyContent: 'space-between',
-   marginTop: 16,
- },
- applyButton: {
-   flex: 1,
-   paddingVertical: 12,
-   borderRadius: 8,
-   alignItems: 'center',
-   marginRight: 8,
- },
- applyButtonText: {
-   fontWeight: '600',
-   fontSize: 16,
- },
- cancelButton: {
-   flex: 1,
-   paddingVertical: 12,
-   borderRadius: 8,
-   borderWidth: 1,
-   alignItems: 'center',
-   marginLeft: 8,
- },
- cancelButtonText: {
-   fontWeight: '600',
-   fontSize: 16,
- },
- // Progress indicator styles
- progressText: {
-   marginTop: 12,
-   fontSize: 14,
-   fontWeight: '500',
- },
- progressBadge: {
-   backgroundColor: '#FFD700',
-   borderRadius: 12,
-   paddingHorizontal: 8,
-   paddingVertical: 2,
-   marginRight: 10,
- },
- progressBadgeText: {
-   color: '#4B0082',
-   fontWeight: 'bold',
-   fontSize: 12,
- },
- // Completion modal styles
- successIcon: {
-   alignSelf: 'center',
-   marginBottom: 16,
- },
- completionText: {
-   fontSize: 18,
-   textAlign: 'center',
-   marginBottom: 16,
- },
- completionSubtext: {
-   fontSize: 16,
-   textAlign: 'center',
-   lineHeight: 22,
-   marginBottom: 24,
- },
- continueButton: {
-   width: '100%',
-   paddingVertical: 14,
-   borderRadius: 8,
-   alignItems: 'center',
-   marginTop: 8,
- },
- continueButtonText: {
-   fontWeight: '600',
-   fontSize: 16,
- },
-});
-
-export default WildcardScreen;
