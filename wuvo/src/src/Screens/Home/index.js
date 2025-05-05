@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -39,21 +39,8 @@ function HomeScreen({ seen, unseen, genres, newReleases, isDarkMode, toggleTheme
   // Auto-scroll animation
   const autoScrollAnimation = useRef(null);
   
-  // Setup auto-scrolling for recommendations
-  useEffect(() => {
-    if (activeTab === 'recommendations' && recommendations.length > 0) {
-      startAutoScroll();
-    }
-    
-    return () => {
-      if (autoScrollAnimation.current) {
-        autoScrollAnimation.current.stop();
-      }
-    };
-  }, [activeTab, recommendations]);
-  
-  // Start auto-scrolling animation
-  const startAutoScroll = () => {
+  // Start auto-scrolling animation (wrapped in useCallback)
+  const startAutoScroll = useCallback(() => {
     if (autoScrollAnimation.current) {
       autoScrollAnimation.current.stop();
     }
@@ -67,7 +54,20 @@ function HomeScreen({ seen, unseen, genres, newReleases, isDarkMode, toggleTheme
     );
     
     autoScrollAnimation.current.start();
-  };
+  }, [position.x, CAROUSEL_ITEM_WIDTH]);
+  
+  // Setup auto-scrolling for recommendations
+  useEffect(() => {
+    if (activeTab === 'recommendations' && recommendations.length > 0) {
+      startAutoScroll();
+    }
+    
+    return () => {
+      if (autoScrollAnimation.current) {
+        autoScrollAnimation.current.stop();
+      }
+    };
+  }, [activeTab, recommendations, startAutoScroll]);
   
   // Pan responder for manual scrolling
   const panResponder = useRef(

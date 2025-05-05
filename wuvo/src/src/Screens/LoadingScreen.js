@@ -31,7 +31,7 @@ const LoadingScreen = ({ onFinishLoading, isDarkMode = true }) => {
   // Pulse animation for logo
   const logoPulse = useRef(new Animated.Value(1)).current;
   
-  // Run pulse animation in loop
+  // Run pulse animation in loop with proper dependency
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -49,7 +49,7 @@ const LoadingScreen = ({ onFinishLoading, isDarkMode = true }) => {
         })
       ])
     ).start();
-  }, []);
+  }, [logoPulse]); // Added logoPulse dependency
 
   useEffect(() => {
     // Animation sequence
@@ -155,7 +155,17 @@ const LoadingScreen = ({ onFinishLoading, isDarkMode = true }) => {
         onFinishLoading();
       }
     });
-  }, []);
+  }, [
+    logoFade, 
+    logoRotate, 
+    logoScale, 
+    spotlight1, 
+    spotlight2, 
+    spotlight3, 
+    taglineFade, 
+    taglineSlide, 
+    onFinishLoading
+  ]); // Added all dependencies
   
   // Spotlight positions and rotations with improved animation paths
   const spotlight1Style = {

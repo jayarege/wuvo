@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  Image, 
-  TouchableOpacity, 
-  ActivityIndicator, 
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
   SafeAreaView,
   Modal,
   ScrollView,
@@ -29,7 +29,7 @@ const BASELINE_COMPLETE_KEY = 'wuvo_baseline_complete';
 const COMPARISON_COUNT_KEY = 'wuvo_comparison_count';
 const COMPARISON_PATTERN_KEY = 'wuvo_comparison_pattern';
 
-// Baseline movies set with popular films
+// Larger baseline movies set with more popular films
 const baselineMovies = [
   { id: 238, title: "The Godfather" },
   { id: 278, title: "The Shawshank Redemption" },
@@ -79,7 +79,7 @@ const uniqueBaselineMovies = Array.from(new Set(baselineMovies.map(m => m.id)))
     return baselineMovies.find(m => m.id === id);
   });
 
-function WildcardScreen({ seen, setSeen, unseen, addToSeen, addToUnseen, genres, isDarkMode }) {
+function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, genres, isDarkMode }) {
   const [seenMovie, setSeenMovie] = useState(null);
   const [newMovie, setNewMovie] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -92,7 +92,7 @@ function WildcardScreen({ seen, setSeen, unseen, addToSeen, addToUnseen, genres,
   const [selectedGenre, setSelectedGenre] = useState(null);
   const [tempGenre, setTempGenre] = useState(null);
   const [comparisonCount, setComparisonCount] = useState(0);
-  const [comparisonPattern, setComparisonPattern] = useState(0); // 0,1,2,3,4: Pattern counter (4 = known vs known)
+  const [comparisonPattern, setComparisonPattern] = useState(0); // 0-4: tracks where we are in the pattern
   const isLoadingRef = useRef(false);
 
   // Load compared movies and other state from storage on initial load
@@ -320,7 +320,7 @@ function WildcardScreen({ seen, setSeen, unseen, addToSeen, addToUnseen, genres,
       apiUrl += `&with_genres=${selectedGenre}`;
     }
     
-    // Add random page (1-10) to get more variety - increased from 1-5 to 1-10
+    // Add random page (1-10) to get more variety
     const page = Math.floor(Math.random() * 10) + 1;
     apiUrl += `&page=${page}`;
     
@@ -592,7 +592,8 @@ function WildcardScreen({ seen, setSeen, unseen, addToSeen, addToUnseen, genres,
     getNextBaselineMovie,
     getMovieDetails, 
     getSimilarMovie,
-    getKnownVsKnownPair
+    getKnownVsKnownPair,
+    uniqueBaselineMovies
   ]);
 
   // Initial fetch on component mount
@@ -751,8 +752,8 @@ function WildcardScreen({ seen, setSeen, unseen, addToSeen, addToUnseen, genres,
         m.id === seenMovie.id ? updatedSeenMovie : m
       );
       
-      // Add new movie to seen list using the non-duplicate function
-      addToSeen(updatedNewMovie);
+      // Add new movie to seen list
+      onAddToSeen(updatedNewMovie);
       
       // Save the action for potential undo
       setLastAction({
@@ -768,4 +769,516 @@ function WildcardScreen({ seen, setSeen, unseen, addToSeen, addToUnseen, genres,
     setSeenMovie(null);
     setLoading(true);
     fetchRandomMovie();
-  }, [seenMovie, newMovie, seen, setSeen, adjustRating, fetchRandomMovie, markMovieAsCompared, comparisonPattern, addToSeen]);
+  }, [seenMovie, newMovie, seen, setSeen, adjustRating, fetchRandomMovie, markMovieAsCompared, comparisonPattern, onAddToSeen]);
+
+  // Handle user choosing the new movie as better
+  const handleNewWin = useCallback(() => {
+    if (isLoadingRef.current || !seenMovie || !newMovie) {
+      console.log('Ignoring click while loading or missing movies');
+      return;
+    }
+    
+    // Check if this is a known vs known comparison
+    const isKnownVsKnown = comparisonPattern === 4 && seen.some(m => m.id === newMovie.id);
+    
+    if (isKnownVsKnown) {
+      // For known vs known, just adjust the ratings directly in the seen list
+      // Calculate rating adjustment
+      const { updatedSeenMovie, updatedNewMovie } = adjustRating(newMovie, seenMovie, false);
+      
+      // Update both movies in the seen list
+      const updatedSeen = seen.map(m => {
+        if (m.id === seenMovie.id) return updatedSeenMovie;
+        if (m.id === newMovie.id) return updatedNewMovie;
+        return m;
+      });
+      
+      // Save action for undo
+      setLastAction({
+        type: 'known_comparison',
+        seenMovie: {...seenMovie},
+        newMovie: {...newMovie},
+        winnerIsSeenMovie: false
+      });
+      
+      setSeen(updatedSeen);
+    } else {
+      // Mark the movie as compared
+      markMovieAsCompared(newMovie.id);
+      
+      // Update ratings
+      const { updatedSeenMovie, updatedNewMovie } = adjustRating(newMovie, seenMovie, false);
+      
+      // Update existing movie rating
+      const updatedSeen = seen.map(m => 
+        m.id === seenMovie.id ? updatedSeenMovie : m
+      );
+      
+      // Add new movie to seen list
+      onAddToSeen(updatedNewMovie);
+      
+      // Save the action for potential undo
+      setLastAction({
+        type: 'comparison',
+        seenMovie: {...seenMovie},
+        newMovie: {...newMovie},
+        winnerIsSeenMovie: false
+      });
+    }
+    
+    // Fetch the next comparison
+    setNewMovie(null);
+    setSeenMovie(null);
+    setLoading(true);
+    fetchRandomMovie();
+  }, [seenMovie, newMovie, seen, setSeen, adjustRating, fetchRandomMovie, markMovieAsCompared, comparisonPattern, onAddToSeen]);
+
+  // Handle user hasn't seen the new movie
+  const handleUnseen = useCallback(() => {
+    if (isLoadingRef.current || !seenMovie || !newMovie) {
+      console.log('Ignoring click while loading or missing movies');
+      return;
+    }
+    
+    // Check if this is a known vs known comparison
+    const isKnownVsKnown = comparisonPattern === 4 && seen.some(m => m.id === newMovie.id);
+    
+    if (isKnownVsKnown) {
+      // Cannot mark a known movie as unseen, show an alert
+      Alert.alert(
+        'Already Rated',
+        'This movie is already in your rated list. You can\'t add it to watchlist.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    // Mark the movie as compared
+    markMovieAsCompared(newMovie.id);
+    
+    // Add to watchlist
+    onAddToUnseen(newMovie);
+    
+    // Save action for undo
+    setLastAction({
+      type: 'unseen',
+      movie: {...newMovie}
+    });
+    
+    // Fetch the next comparison
+    setNewMovie(null);
+    setSeenMovie(null);
+    setLoading(true);
+    fetchRandomMovie();
+  }, [newMovie, onAddToUnseen, fetchRandomMovie, markMovieAsCompared, seenMovie, comparisonPattern, seen]);
+
+  // Handle user skipping this comparison
+  const handleSkip = useCallback(() => {
+    if (isLoadingRef.current || !seenMovie || !newMovie) {
+      console.log('Ignoring click while loading or missing movies');
+      return;
+    }
+    
+    // Always mark the unknown movie as compared, even in Known vs Known mode
+    if (comparisonPattern !== 4 || !seen.some(m => m.id === newMovie.id)) {
+      markMovieAsCompared(newMovie.id);
+    }
+    
+    // Save action for undo
+    setLastAction({
+      type: 'skip',
+      seenMovie: {...seenMovie},
+      newMovie: {...newMovie},
+      isKnownVsKnown: comparisonPattern === 4 && seen.some(m => m.id === newMovie.id)
+    });
+    
+    // Just fetch a new comparison
+    setNewMovie(null);
+    setSeenMovie(null);
+    setLoading(true);
+    fetchRandomMovie();
+  }, [seenMovie, newMovie, fetchRandomMovie, markMovieAsCompared, comparisonPattern, seen]);
+
+  // Handle tough choice
+  const handleToughChoice = useCallback(() => {
+    if (isLoadingRef.current || !seenMovie || !newMovie) {
+      console.log('Ignoring click while loading or missing movies');
+      return;
+    }
+    
+    // Check if this is a known vs known comparison
+    const isKnownVsKnown = comparisonPattern === 4 && seen.some(m => m.id === newMovie.id);
+    
+    if (isKnownVsKnown) {
+      // For known vs known, calculate the average rating and apply to both
+      const avgRating = (seenMovie.userRating + newMovie.userRating) / 2;
+      
+      // Slight difference to keep them distinct
+      const updatedSeenMovie = {
+        ...seenMovie,
+        userRating: Math.min(10, Math.max(1, avgRating + 0.05)),
+        eloRating: Math.min(1000, Math.max(100, (avgRating + 0.05) * 10))
+      };
+      
+      const updatedNewMovie = {
+        ...newMovie,
+        userRating: Math.min(10, Math.max(1, avgRating - 0.05)),
+        eloRating: Math.min(1000, Math.max(100, (avgRating - 0.05) * 10))
+      };
+      
+      // Update both movies in the seen list
+      const updatedSeen = seen.map(m => {
+        if (m.id === seenMovie.id) return updatedSeenMovie;
+        if (m.id === newMovie.id) return updatedNewMovie;
+        return m;
+      });
+      
+      // Save action for undo
+      setLastAction({
+        type: 'tough_known',
+        seenMovie: {...seenMovie},
+        newMovie: {...newMovie}
+      });
+      
+      setSeen(updatedSeen);
+    } else {
+      // Mark the movie as compared
+      markMovieAsCompared(newMovie.id);
+      
+      // Determine which movie has the lower rating
+      const lowerRatedMovie = seenMovie.userRating <= newMovie.score ? seenMovie : newMovie;
+      const higherRatedMovie = lowerRatedMovie === seenMovie ? newMovie : seenMovie;
+      
+      // Small boost for the lower-rated movie
+      const averageRating = (seenMovie.userRating + newMovie.score) / 2;
+      
+      let updatedSeenMovie, updatedNewMovie;
+      
+      if (lowerRatedMovie === seenMovie) {
+        // Seen movie gets a small boost as the lower-rated one
+        const newSeenRating = Math.min(10, Math.max(1, averageRating + 0.1));
+        
+        updatedSeenMovie = {
+          ...seenMovie,
+          userRating: newSeenRating,
+          eloRating: newSeenRating * 10
+        };
+        
+        // New movie gets added with a rating just below the seen movie's adjusted rating
+        const newRating = Math.max(1, Math.min(10, averageRating - 0.1));
+        
+        updatedNewMovie = {
+          ...newMovie,
+          userRating: newRating,
+          eloRating: newRating * 10
+        };
+      } else {
+        // New movie is lower-rated, rate it slightly higher than its original score
+        const newMovieRating = Math.min(10, Math.max(1, averageRating + 0.1));
+        
+        updatedNewMovie = {
+          ...newMovie,
+          userRating: newMovieRating,
+          eloRating: newMovieRating * 10
+        };
+        
+        // Seen movie gets rated slightly lower
+        const seenMovieRating = Math.max(1, Math.min(10, averageRating - 0.1));
+        
+        updatedSeenMovie = {
+          ...seenMovie,
+          userRating: seenMovieRating,
+          eloRating: seenMovieRating * 10
+        };
+      }
+      
+      // Save action for undo
+      setLastAction({
+        type: 'tough',
+        seenMovie: {...seenMovie},
+        newMovie: {...newMovie}
+      });
+      
+      // Update seen movie in the list
+      const updatedSeen = seen.map(m => 
+        m.id === seenMovie.id ? updatedSeenMovie : m
+      );
+      
+      // Add new movie to seen list
+      onAddToSeen(updatedNewMovie);
+    }
+    
+    // Fetch the next comparison
+    setNewMovie(null);
+    setSeenMovie(null);
+    setLoading(true);
+    fetchRandomMovie();
+  }, [seenMovie, newMovie, seen, setSeen, fetchRandomMovie, markMovieAsCompared, comparisonPattern, onAddToSeen]);
+
+  // Handle undo last action
+  const handleUndo = useCallback(() => {
+    if (!lastAction || isLoadingRef.current) return;
+    
+    let filteredSeen;
+    let restoredSeen;
+    let filteredUnseen;
+    
+    switch (lastAction.type) {
+      case 'comparison':
+        // Remove the new movie from the seen list
+        filteredSeen = seen.filter(m => m.id !== lastAction.newMovie.id);
+        
+        // Restore the rating of the seen movie
+        restoredSeen = filteredSeen.map(m => 
+          m.id === lastAction.seenMovie.id ? lastAction.seenMovie : m
+        );
+        
+        setSeen(restoredSeen);
+        
+        // Remove from compared movies
+        setComparedMovies(prev => prev.filter(id => id !== lastAction.newMovie.id));
+        
+        // Decrement comparison count
+        setComparisonCount(prev => Math.max(0, prev - 1));
+        
+        // Roll back comparison pattern
+        setComparisonPattern(prev => (prev - 1 + 5) % 5); // 4,3,2,1,0,4,3,...
+        
+        // Restore the movies for a new comparison
+        setSeenMovie(lastAction.seenMovie);
+        setNewMovie(lastAction.newMovie);
+        setLoading(false);
+        break;
+        
+      case 'known_comparison':
+        // For known vs known, restore both ratings
+        restoredSeen = seen.map(m => {
+          if (m.id === lastAction.seenMovie.id) return lastAction.seenMovie;
+          if (m.id === lastAction.newMovie.id) return lastAction.newMovie;
+          return m;
+        });
+        
+        setSeen(restoredSeen);
+        
+        // Roll back comparison pattern
+        setComparisonPattern(prev => (prev - 1 + 5) % 5); // 4,3,2,1,0,4,3,...
+        
+        // Restore the movies for a new comparison
+        setSeenMovie(lastAction.seenMovie);
+        setNewMovie(lastAction.newMovie);
+        setLoading(false);
+        break;
+        
+      case 'unseen':
+        // Remove the movie from unseen/watchlist
+        filteredUnseen = unseen.filter(m => m.id !== lastAction.movie.id);
+        onAddToUnseen(filteredUnseen);
+        
+        // Remove from compared movies
+        setComparedMovies(prev => prev.filter(id => id !== lastAction.movie.id));
+        
+        // Decrement comparison count
+        setComparisonCount(prev => Math.max(0, prev - 1));
+        
+        // Roll back comparison pattern
+        setComparisonPattern(prev => (prev - 1 + 5) % 5); // 4,3,2,1,0,4,3,...
+        
+        // Restore the movie for comparison
+        setNewMovie(lastAction.movie);
+        setLoading(false);
+        break;
+        
+      case 'skip':
+        if (!lastAction.isKnownVsKnown) {
+          // Remove from compared movies
+          setComparedMovies(prev => prev.filter(id => id !== lastAction.newMovie.id));
+          
+          // Decrement comparison count
+          setComparisonCount(prev => Math.max(0, prev - 1));
+        }
+        
+        // Roll back comparison pattern
+        setComparisonPattern(prev => (prev - 1 + 5) % 5); // 4,3,2,1,0,4,3,...
+        
+        // Restore the movies for comparison
+        setSeenMovie(lastAction.seenMovie);
+        setNewMovie(lastAction.newMovie);
+        setLoading(false);
+        break;
+        
+      case 'tough':
+      case 'tough_known':
+        if (lastAction.type === 'tough') {
+          // Remove the new movie from seen
+          filteredSeen = seen.filter(m => m.id !== lastAction.newMovie.id);
+          
+          // Restore the rating of the seen movie
+          restoredSeen = filteredSeen.map(m => 
+            m.id === lastAction.seenMovie.id ? lastAction.seenMovie : m
+          );
+          
+          setSeen(restoredSeen);
+          
+          // Remove from compared movies
+          setComparedMovies(prev => prev.filter(id => id !== lastAction.newMovie.id));
+          
+          // Decrement comparison count
+          setComparisonCount(prev => Math.max(0, prev - 1));
+        } else {
+          // For tough_known, restore both ratings
+          restoredSeen = seen.map(m => {
+            if (m.id === lastAction.seenMovie.id) return lastAction.seenMovie;
+            if (m.id === lastAction.newMovie.id) return lastAction.newMovie;
+            return m;
+          });
+          
+          setSeen(restoredSeen);
+        }
+        
+        // Roll back comparison pattern
+        setComparisonPattern(prev => (prev - 1 + 5) % 5); // 4,3,2,1,0,4,3,...
+        
+        // Restore the movies for comparison
+        setSeenMovie(lastAction.seenMovie);
+        setNewMovie(lastAction.newMovie);
+        setLoading(false);
+        break;
+      
+      default:
+        break;
+    }
+    
+    // Clear the last action
+    setLastAction(null);
+  }, [lastAction, seen, unseen, setSeen, onAddToUnseen]);
+
+  const handleRetry = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    setNewMovie(null);
+    setSeenMovie(null);
+    isLoadingRef.current = false;
+    fetchRandomMovie();
+  }, [fetchRandomMovie]);
+  
+  // Handle baseline complete acknowledgment
+  const handleBaselineCompleteAcknowledge = useCallback(() => {
+    setShowBaselineCompleteModal(false);
+  }, []);
+
+  const getPosterUrl = path => `https://image.tmdb.org/t/p/w342${path}`;
+
+  // Loading state
+  if (loading) {
+    return (
+      <SafeAreaView style={[layoutStyles.safeArea, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
+        <View style={stateStyles.loadingContainer}>
+          <ActivityIndicator size="large" color={isDarkMode ? '#FFD700' : '#4B0082'} />
+          <Text style={[stateStyles.loadingText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
+            {baselineComplete ? 'Finding movies tailored to your taste...' : 'Loading movies for comparison...'}
+          </Text>
+          <Text style={[styles.progressText, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
+            {!baselineComplete ? 
+              `Progress: ${Math.min(comparedMovies.length, uniqueBaselineMovies.length)}/${uniqueBaselineMovies.length} movies` :
+              'Custom recommendations enabled'
+            }
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <SafeAreaView style={[layoutStyles.safeArea, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
+        <View style={[stateStyles.errorContainer, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5' }]}>
+          <Ionicons name="information-circle-outline" size={48} color={isDarkMode ? '#FFD700' : '#4B0082'} />
+          <Text style={[stateStyles.errorText, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
+            {error}
+          </Text>
+          <Text style={[stateStyles.errorSubText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
+            {seen.length < 3 ? 'Go to the Add Movie tab to rate more movies.' : 'This may be temporary. Try again or select a different genre.'}
+          </Text>
+          <TouchableOpacity
+            style={[stateStyles.retryButton, { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082' }]}
+            onPress={handleRetry}
+            activeOpacity={0.7}
+          >
+            <Text style={[stateStyles.retryButtonText, { color: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
+              Try Again
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!seenMovie || !newMovie) return null;
+
+  // Check if this is a known vs known comparison
+  const isKnownVsKnown = comparisonPattern === 4 && seen.some(m => m.id === newMovie.id);
+
+  // Main UI
+  return (
+    <SafeAreaView style={[layoutStyles.safeArea, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
+      <View
+        style={[
+          headerStyles.screenHeader,
+          { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5', borderBottomColor: isDarkMode ? '#8A2BE2' : '#E0E0E0' },
+        ]}
+      >
+        <Text style={[headerStyles.screenTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}>
+          {isKnownVsKnown ? 'Compare Your Ratings' : 
+            baselineComplete ? 'Movie Recommendations' : 'Movie Ratings'}
+        </Text>
+        <View style={styles.actionRow}>
+          {!baselineComplete && !isKnownVsKnown && (
+            <View style={styles.progressBadge}>
+              <Text style={styles.progressBadgeText}>
+                {Math.min(comparedMovies.length, uniqueBaselineMovies.length)}/{uniqueBaselineMovies.length}
+              </Text>
+            </View>
+          )}
+          {lastAction && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleUndo}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-undo" size={24} color={isDarkMode ? '#FFD700' : '#4B0082'} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={openFilterModal}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="filter" size={24} color={isDarkMode ? '#FFD700' : '#4B0082'} />
+            {selectedGenre && (
+              <View style={styles.filterBadge} />
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={[compareStyles.compareContainer, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
+        <View style={compareStyles.compareContent}>
+          <Text style={[compareStyles.compareTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}>
+            {isKnownVsKnown ? 'Which movie do you prefer?' : 'Which movie was better?'}
+          </Text>
+          <View style={compareStyles.compareMovies}>
+            <TouchableOpacity
+              style={[compareStyles.posterContainer, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5' }]}
+              onPress={handleSeenWin}
+              activeOpacity={0.7}
+            >
+              <Image
+                source={{ uri: getPosterUrl(seenMovie.poster) }}
+                style={compareStyles.poster}
+                resizeMode="cover"
+              />
+              <View style={compareStyles.posterOverlay}>
+                <Text
+                  style={[movieCardStyles.movieTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}
+                     </Text>
