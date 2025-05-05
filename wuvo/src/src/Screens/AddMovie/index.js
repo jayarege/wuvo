@@ -1,39 +1,13 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  FlatList, 
-  Image, 
-  ActivityIndicator, 
-  SafeAreaView,
-  Modal,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Keyboard
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import layoutStyles from '../../Styles/layoutStyles';
-import headerStyles from '../../Styles/headerStyles';
-import searchStyles from '../../Styles/searchStyles';
-import movieCardStyles from '../../Styles/movieCardStyles';
-import buttonStyles from '../../Styles/buttonStyles';
-import stateStyles from '../../Styles/StateStyles';
-import modalStyles from '../../Styles/modalStyles';
+// src/utils/MovieSearch.js - Fully optimized
 
-const API_KEY = 'b401be0ea16515055d8d0bde16f80069';
+import { useState, useCallback, useRef, useMemo } from 'react';
 
-// Advanced movie search engine
 class MovieSearcher {
   constructor(options = {}) {
     this.options = {
       maxResults: options.maxResults || 10,
       apiKey: options.apiKey || '',
       similarityThreshold: options.similarityThreshold || 0.3,
-      // Weight factors for scoring
       weights: {
         titleSimilarity: options.weights?.titleSimilarity || 0.4,
         userPreference: options.weights?.userPreference || 0.3,
@@ -41,13 +15,26 @@ class MovieSearcher {
       }
     };
     
-    // Similarity algorithm
     this.similarityAlgorithm = options.similarityAlgorithm || this.levenshteinSimilarity;
+    
+    // Cache to avoid repeated calculations
+    this._similarityCache = new Map();
+    this._genreScoreCache = new Map();
+    this._apiRequestCache = new Map();
+    this._abortControllers = new Map();
   }
   
-  // Default similarity algorithm - Levenshtein distance based similarity
+  // Optimized Levenshtein distance with early returns and caching
   levenshteinSimilarity(str1, str2) {
     if (!str1 || !str2) return 0;
+    
+    // Cache key for bidirectional lookup
+    const cacheKey = str1 <= str2 ? `${str1}|${str2}` : `${str2}|${str1}`;
+    
+    // Check cache first
+    if (this._similarityCache.has(cacheKey)) {
+      return this._similarityCache.get(cacheKey);
+    }
     
     // Convert to lowercase for case-insensitive comparison
     const s1 = str1.toLowerCase();
@@ -55,51 +42,127 @@ class MovieSearcher {
     
     // Early returns for common cases
     if (s1 === s2) return 1; // Exact match
-    if (s1.includes(s2) || s2.includes(s1)) return 0.9; // One is substring of the other
+    if (s1.includes(s2) || s2.includes(s1)) {
+      const similarity = 0.9;
+      this._similarityCache.set(cacheKey, similarity);
+      return similarity;
+    }
     
-    // Get individual words
+    // Check for common word matches first (faster than Levenshtein)
     const words1 = s1.split(/\s+/).filter(w => w.length > 1);
     const words2 = s2.split(/\s+/).filter(w => w.length > 1);
     
     // Check for word matches
     const commonWords = words1.filter(w => words2.some(w2 => w2.includes(w) || w.includes(w2)));
     if (commonWords.length > 0) {
-      return 0.5 + (0.4 * commonWords.length / Math.max(words1.length, words2.length));
+      const similarity = 0.5 + (0.4 * commonWords.length / Math.max(words1.length, words2.length));
+      this._similarityCache.set(cacheKey, similarity);
+      return similarity;
     }
     
-    // Calculate Levenshtein distance
-    const track = Array(s2.length + 1).fill(null).map(() => 
-      Array(s1.length + 1).fill(null));
-    
-    for (let i = 0; i <= s1.length; i++) track[0][i] = i;
-    for (let j = 0; j <= s2.length; j++) track[j][0] = j;
-    
-    for (let j = 1; j <= s2.length; j++) {
-      for (let i = 1; i <= s1.length; i++) {
-        const indicator = s1[i - 1] === s2[j - 1] ? 0 : 1;
-        track[j][i] = Math.min(
-          track[j][i - 1] + 1, // deletion
-          track[j - 1][i] + 1, // insertion
-          track[j - 1][i - 1] + indicator // substitution
-        );
-      }
+    // For very different strings, use a faster approximation algorithm 
+    // for long strings to improve performance
+    if (Math.abs(s1.length - s2.length) > 10 && Math.max(s1.length, s2.length) > 20) {
+      // If length difference is substantial, use character frequency comparison
+      // instead of full Levenshtein (much faster for long strings)
+      const charFreq1 = this._getCharFrequency(s1);
+      const charFreq2 = this._getCharFrequency(s2);
+      const similarity = this._compareCharFrequencies(charFreq1, charFreq2);
+      this._similarityCache.set(cacheKey, similarity);
+      return similarity;
     }
+    
+    // Use actual Levenshtein distance for shorter strings or more similar length strings
+    // Faster iterative implementation with matrix reuse for better performance
+    const track = this._getLevenshteinMatrix(s1, s2);
     
     // Convert distance to similarity (0-1 scale)
     const maxLen = Math.max(s1.length, s2.length);
     const distance = track[s2.length][s1.length];
-    return 1 - (distance / maxLen);
+    const similarity = 1 - (distance / maxLen);
+    
+    // Cache result
+    this._similarityCache.set(cacheKey, similarity);
+    return similarity;
   }
   
-  // Calculate user preference score based on user history
+  // Helper method for character frequency
+  _getCharFrequency(str) {
+    const freq = {};
+    for (let i = 0; i < str.length; i++) {
+      const char = str[i];
+      freq[char] = (freq[char] || 0) + 1;
+    }
+    return freq;
+  }
+  
+  // Helper method to compare character frequencies
+  _compareCharFrequencies(freq1, freq2) {
+    const allChars = new Set([...Object.keys(freq1), ...Object.keys(freq2)]);
+    let similarity = 0;
+    let total = 0;
+    
+    allChars.forEach(char => {
+      const count1 = freq1[char] || 0;
+      const count2 = freq2[char] || 0;
+      similarity += Math.min(count1, count2);
+      total += Math.max(count1, count2);
+    });
+    
+    return total > 0 ? similarity / total : 0;
+  }
+  
+  // Optimized Levenshtein calculation
+  _getLevenshteinMatrix(s1, s2) {
+    // Create matrix efficiently
+    const rows = s2.length + 1;
+    const cols = s1.length + 1;
+    const matrix = new Array(rows);
+    
+    // Initialize first row
+    matrix[0] = new Array(cols);
+    for (let i = 0; i < cols; i++) {
+      matrix[0][i] = i;
+    }
+    
+    // Fill the matrix
+    for (let j = 1; j < rows; j++) {
+      matrix[j] = new Array(cols);
+      matrix[j][0] = j;
+      
+      for (let i = 1; i < cols; i++) {
+        const indicator = s1[i - 1] === s2[j - 1] ? 0 : 1;
+        matrix[j][i] = Math.min(
+          matrix[j][i - 1] + 1,      // deletion
+          matrix[j - 1][i] + 1,      // insertion
+          matrix[j - 1][i - 1] + indicator  // substitution
+        );
+      }
+    }
+    
+    return matrix;
+  }
+  
+  // Optimized user preference calculation with caching
   calculateUserPreferenceScore(movie, userHistory) {
     if (!userHistory || userHistory.length === 0) return 0.5; // Neutral score
+    
+    // Use a cache key based on movie ID and a hash of user history
+    const historyHash = this._getUserHistoryHash(userHistory);
+    const cacheKey = `${movie.id}|${historyHash}`;
+    
+    // Check cache first
+    if (this._genreScoreCache.has(cacheKey)) {
+      return this._genreScoreCache.get(cacheKey);
+    }
     
     // Start with base score
     let score = 0.5;
     
-    // Check if user has rated similar genres
-    const userGenreScores = this._aggregateGenreScores(userHistory);
+    // Get user genre preferences (cached internally)
+    const userGenreScores = this._getAggregatedGenreScores(userHistory);
+    
+    // Calculate genre boost
     const genreBoost = movie.genre_ids?.reduce((sum, genreId) => {
       return sum + (userGenreScores[genreId] || 0);
     }, 0) || 0;
@@ -107,21 +170,40 @@ class MovieSearcher {
     // Normalize genre boost (0-0.3 range)
     const normalizedGenreBoost = Math.min(0.3, genreBoost / 10);
     
-    // Check for directors/actors the user likes (simplified)
-    const directorBoost = 0; // Placeholder for director preference
-    
     // Check release year preference
     const yearPreference = this._calculateYearPreference(movie, userHistory);
     
-    // Combine all factors
-    score += normalizedGenreBoost + directorBoost + yearPreference;
+    // Combine factors
+    score += normalizedGenreBoost + yearPreference;
     
-    // Clamp the score to 0-1 range
-    return Math.max(0, Math.min(1, score));
+    // Clamp score
+    const finalScore = Math.max(0, Math.min(1, score));
+    
+    // Cache the result
+    this._genreScoreCache.set(cacheKey, finalScore);
+    
+    return finalScore;
   }
   
-  // Helper for aggregating genre scores from user history
-  _aggregateGenreScores(userHistory) {
+  // Generate a simple hash for user history to detect changes
+  _getUserHistoryHash(userHistory) {
+    if (!userHistory || userHistory.length === 0) return '0';
+    
+    // Use last update time or IDs+ratings to detect changes
+    return userHistory.reduce((hash, movie) => {
+      return hash + `|${movie.id}:${movie.userRating || movie.eloRating/100}`;
+    }, '');
+  }
+  
+  // Optimized, cached genre score aggregation
+  _getAggregatedGenreScores(userHistory) {
+    const historyHash = this._getUserHistoryHash(userHistory);
+    const cacheKey = `genres|${historyHash}`;
+    
+    if (this._genreScoreCache.has(cacheKey)) {
+      return this._genreScoreCache.get(cacheKey);
+    }
+    
     const genreScores = {};
     
     userHistory.forEach(historyItem => {
@@ -135,37 +217,48 @@ class MovieSearcher {
       });
     });
     
+    this._genreScoreCache.set(cacheKey, genreScores);
     return genreScores;
   }
   
-  // Helper for calculating year preference
+  // Optimized year preference calculation
   _calculateYearPreference(movie, userHistory) {
     if (!movie.release_date || userHistory.length === 0) return 0;
     
     const movieYear = new Date(movie.release_date).getFullYear();
     if (isNaN(movieYear)) return 0;
     
-    // Calculate weighted average of years from user's highly rated movies
-    let totalWeight = 0;
-    let weightedYearSum = 0;
+    // Get weighted average of preferred years (cached)
+    const historyHash = this._getUserHistoryHash(userHistory);
+    const cacheKey = `year|${historyHash}`;
     
-    userHistory.forEach(historyItem => {
-      if (!historyItem.release_date) return;
+    let preferredYear;
+    if (this._genreScoreCache.has(cacheKey)) {
+      preferredYear = this._genreScoreCache.get(cacheKey);
+    } else {
+      let totalWeight = 0;
+      let weightedYearSum = 0;
       
-      const historyYear = new Date(historyItem.release_date).getFullYear();
-      if (isNaN(historyYear)) return;
+      userHistory.forEach(historyItem => {
+        if (!historyItem.release_date) return;
+        
+        const historyYear = new Date(historyItem.release_date).getFullYear();
+        if (isNaN(historyYear)) return;
+        
+        const rating = historyItem.userRating || historyItem.eloRating / 100;
+        if (rating >= 7) { // Only consider highly rated movies
+          const weight = (rating - 7) * 3; // Weight by how much they liked it
+          totalWeight += weight;
+          weightedYearSum += historyYear * weight;
+        }
+      });
       
-      const rating = historyItem.userRating || historyItem.eloRating / 100;
-      if (rating >= 7) { // Only consider highly rated movies
-        const weight = (rating - 7) * 3; // Weight by how much they liked it
-        totalWeight += weight;
-        weightedYearSum += historyYear * weight;
-      }
-    });
+      if (totalWeight === 0) return 0;
+      
+      preferredYear = weightedYearSum / totalWeight;
+      this._genreScoreCache.set(cacheKey, preferredYear);
+    }
     
-    if (totalWeight === 0) return 0;
-    
-    const preferredYear = weightedYearSum / totalWeight;
     const yearDiff = Math.abs(movieYear - preferredYear);
     
     // Convert to a score (closer to preferred year = higher score)
@@ -173,134 +266,186 @@ class MovieSearcher {
     return 0.1 - (Math.min(yearDiff, 30) / 300);
   }
   
-  // Search implementation
+  // Main search with optimized API calls and caching
   async searchMovies(query, userHistory = []) {
     if (!query || query.length < 2) return [];
     
+    // Abort any previous ongoing search
+    if (this._abortControllers.has(query)) {
+      this._abortControllers.get(query).abort();
+    }
+    
     try {
-      // Fetch initial results from TMDb
-      const results = await this._fetchFromTMDb(query);
+      // Create abort controller for this request
+      const controller = new AbortController();
+      this._abortControllers.set(query, controller);
+      
+      // Check cache first (with TTL of 5 minutes)
+      const cacheKey = `${query}|${this._getUserHistoryHash(userHistory)}`;
+      const cachedResult = this._apiRequestCache.get(cacheKey);
+      
+      if (cachedResult && Date.now() - cachedResult.timestamp < 5 * 60 * 1000) {
+        return cachedResult.data;
+      }
+      
+      // Fetch results with timeout
+      const results = await Promise.race([
+        this._fetchFromTMDb(query, controller.signal),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Search timed out')), 5000)
+        )
+      ]);
       
       if (!results || results.length === 0) return [];
       
-      // Enrich and score results
+      // Score results
       const scoredResults = this._scoreResults(results, query, userHistory);
       
-      // Return top N results based on maxResults setting
+      // Cache results
+      this._apiRequestCache.set(cacheKey, {
+        data: scoredResults,
+        timestamp: Date.now()
+      });
+      
+      // Limit cache size
+      if (this._apiRequestCache.size > 50) {
+        // Remove oldest entry
+        const oldestKey = Array.from(this._apiRequestCache.keys())[0];
+        this._apiRequestCache.delete(oldestKey);
+      }
+      
+      // Return top N results
       return scoredResults.slice(0, this.options.maxResults);
     } catch (error) {
+      if (error.name === 'AbortError') {
+        // User aborted the request, return empty
+        return [];
+      }
       console.error('Error searching movies:', error);
       return [];
+    } finally {
+      // Clean up
+      this._abortControllers.delete(query);
     }
   }
   
-  // TMDb API integration
-  async _fetchFromTMDb(query) {
+  // Optimized TMDb API fetch
+  async _fetchFromTMDb(query, signal) {
     const apiKey = this.options.apiKey;
     if (!apiKey) {
       console.error('No API key provided for TMDb');
       return [];
     }
     
-    // First, try an exact search
-    const encodedQuery = encodeURIComponent(query);
-    const response = await fetch(
-      `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&language=en-US&query=${encodedQuery}&page=1&include_adult=false`
-    );
+    // Optimize query for better results
+    const trimmedQuery = query.trim();
+    const encodedQuery = encodeURIComponent(trimmedQuery);
     
-    if (!response.ok) {
-      throw new Error('Failed to search for movies');
-    }
-    
-    const data = await response.json();
-    let results = data.results || [];
-    
-    // If we have few results, try a more permissive search
-    if (results.length < 3 && query.includes(' ')) {
-      // Try with the first significant word
-      const firstWord = query.split(' ')[0];
-      if (firstWord.length > 2) {
-        const backupResponse = await fetch(
-          `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&language=en-US&query=${encodeURIComponent(
-            firstWord
-          )}&page=1&include_adult=false`
-        );
+    try {
+      // First search - exact
+      const response = await fetch(
+        `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&language=en-US&query=${encodedQuery}&page=1&include_adult=false`,
+        { signal }
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to search for movies');
+      }
+      
+      const data = await response.json();
+      let results = data.results || [];
+      
+      // If few results and query has spaces, do a second search but only if necessary
+      if (results.length < 3 && trimmedQuery.includes(' ') && trimmedQuery.length > 4) {
+        // Only the first word for better recall
+        const firstWord = trimmedQuery.split(' ')[0];
         
-        if (backupResponse.ok) {
-          const backupData = await backupResponse.json();
+        // Only do backup search if first word is meaningful (3+ chars)
+        if (firstWord.length > 2) {
+          const backupResponse = await fetch(
+            `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&language=en-US&query=${encodeURIComponent(
+              firstWord
+            )}&page=1&include_adult=false`,
+            { signal }
+          );
           
-          if (backupData.results && Array.isArray(backupData.results)) {
-            // Only add new results that don't duplicate what we already have
-            const existingIds = new Set(results.map(m => m.id));
+          if (backupResponse.ok) {
+            const backupData = await backupResponse.json();
             
-            backupData.results.forEach(movie => {
-              if (!existingIds.has(movie.id)) {
-                results.push(movie);
-              }
-            });
+            if (backupData.results && Array.isArray(backupData.results)) {
+              // Use Set for faster duplicate checking
+              const existingIds = new Set(results.map(m => m.id));
+              
+              // Add unique results
+              backupData.results.forEach(movie => {
+                if (!existingIds.has(movie.id)) {
+                  results.push(movie);
+                }
+              });
+            }
           }
         }
       }
+      
+      return results;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw error; // Propagate abort errors
+      }
+      console.error(`Error in TMDb fetch: ${error.message}`);
+      return [];
     }
-    
-    return results;
   }
   
-  // Score and rank the results based on multiple factors
+  // Efficient scoring with early exit for low similarity
   _scoreResults(results, query, userHistory) {
     const { weights, similarityThreshold } = this.options;
     
-    // Process each result
-    const scoredResults = results.map(movie => {
-      // Calculate title similarity score
-      const titleSimilarity = this.similarityAlgorithm(movie.title, query);
-      
-      // Skip results with very low similarity unless it's a very short query
-      if (titleSimilarity < similarityThreshold && query.length > 3) {
-        return null;
-      }
-      
-      // Calculate user preference score
-      const userPreferenceScore = this.calculateUserPreferenceScore(movie, userHistory);
-      
-      // Calculate popularity score (normalized from TMDb data)
-      const voteCount = movie.vote_count || 0;
-      const voteAverage = movie.vote_average || 5;
-      
-      // Normalize vote count (log scale to handle very popular movies)
-      const normalizedVoteCount = voteCount > 0 ? Math.min(1, Math.log10(voteCount) / 4) : 0;
-      
-      // Normalize vote average (1-10 scale to 0-1)
-      const normalizedVoteAverage = (voteAverage - 1) / 9;
-      
-      // Combined popularity score
-      const popularityScore = (normalizedVoteCount * 0.7) + (normalizedVoteAverage * 0.3);
-      
-      // Calculate final score using weights
-      const finalScore = 
-        (titleSimilarity * weights.titleSimilarity) +
-        (userPreferenceScore * weights.userPreference) +
-        (popularityScore * weights.popularity);
-      
-      // Special case for extremely short queries like "the"
-      const isGenericQuery = query.length <= 3;
-      
-      // Return enhanced result with scores
-      return {
-        ...movie,
-        titleSimilarity,
-        userPreferenceScore,
-        popularityScore,
-        finalScore: isGenericQuery ? (popularityScore * 0.8) + (titleSimilarity * 0.2) : finalScore
-      };
-    })
-    .filter(Boolean) // Remove null results
-    .sort((a, b) => b.finalScore - a.finalScore); // Sort by final score
-    
-    return scoredResults;
+    // Lazy similarity calculation with early returns
+    return results
+      .map(movie => {
+        // Calculate title similarity first (fastest check)
+        const titleSimilarity = this.similarityAlgorithm(movie.title, query);
+        
+        // Skip results with very low similarity unless it's a very short query
+        if (titleSimilarity < similarityThreshold && query.length > 3) {
+          return null;
+        }
+        
+        // Only calculate other scores if similarity passes threshold
+        const userPreferenceScore = this.calculateUserPreferenceScore(movie, userHistory);
+        
+        // Normalized popularity scores
+        const voteCount = movie.vote_count || 0;
+        const voteAverage = movie.vote_average || 5;
+        
+        const normalizedVoteCount = voteCount > 0 ? Math.min(1, Math.log10(voteCount) / 4) : 0;
+        const normalizedVoteAverage = (voteAverage - 1) / 9;
+        
+        const popularityScore = (normalizedVoteCount * 0.7) + (normalizedVoteAverage * 0.3);
+        
+        // Calculate final score
+        const isGenericQuery = query.length <= 3;
+        const finalScore = isGenericQuery
+          ? (popularityScore * 0.8) + (titleSimilarity * 0.2)
+          : (titleSimilarity * weights.titleSimilarity) +
+            (userPreferenceScore * weights.userPreference) +
+            (popularityScore * weights.popularity);
+        
+        // Return enhanced result
+        return {
+          ...movie,
+          titleSimilarity,
+          userPreferenceScore,
+          popularityScore,
+          finalScore
+        };
+      })
+      .filter(Boolean) // Remove null results
+      .sort((a, b) => b.finalScore - a.finalScore); // Sort by score
   }
   
-  // Process results into a UI-friendly format
+  // Format results for UI display
   formatResults(results) {
     return results.map(movie => ({
       id: movie.id,
@@ -318,18 +463,41 @@ class MovieSearcher {
       relevance: movie.finalScore || 0
     }));
   }
+  
+  // Cleanup method
+  dispose() {
+    // Abort any pending requests
+    this._abortControllers.forEach(controller => {
+      try {
+        controller.abort();
+      } catch (e) {
+        // Ignore errors
+      }
+    });
+    
+    // Clear caches
+    this._similarityCache.clear();
+    this._genreScoreCache.clear();
+    this._apiRequestCache.clear();
+    this._abortControllers.clear();
+  }
 }
 
-// Custom hook for search functionality
+// Custom hook with optimized state management
 const useMovieSearch = (apiKey, options = {}) => {
   const [results, setResults] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
+  // Persistent ref to avoid recreating searcher
   const searcherRef = useRef(null);
   
-  // Initialize the searcher if needed
+  // Throttle trackers
+  const lastQueryTimeRef = useRef(0);
+  const pendingQueryRef = useRef(null);
+  
+  // Initialize searcher once
   if (!searcherRef.current) {
     searcherRef.current = new MovieSearcher({
       apiKey,
@@ -337,24 +505,61 @@ const useMovieSearch = (apiKey, options = {}) => {
     });
   }
   
-  // Function to update suggestions as user types
-  const updateSuggestions = useCallback(async (query, userHistory) => {
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (searcherRef.current) {
+        searcherRef.current.dispose();
+      }
+    };
+  }, []);
+  
+  // Throttled suggestion updater
+  const updateSuggestions = useCallback((query, userHistory) => {
+    // Skip empty queries
     if (!query || query.length < 2) {
       setSuggestions([]);
       return;
     }
     
-    try {
-      const results = await searcherRef.current.searchMovies(query, userHistory);
-      const formattedResults = searcherRef.current.formatResults(results);
-      setSuggestions(formattedResults);
-    } catch (err) {
-      console.error('Error getting suggestions:', err);
-      setSuggestions([]);
+    // Throttle to max 1 request per 300ms
+    const now = Date.now();
+    const timeSinceLastQuery = now - lastQueryTimeRef.current;
+    
+    if (timeSinceLastQuery < 300) {
+      // Clear any pending query
+      if (pendingQueryRef.current) {
+        clearTimeout(pendingQueryRef.current);
+      }
+      
+      // Schedule this query to run later
+      pendingQueryRef.current = setTimeout(() => {
+        updateSuggestions(query, userHistory);
+      }, 300 - timeSinceLastQuery);
+      
+      return;
     }
+    
+    // Update timestamp
+    lastQueryTimeRef.current = now;
+    
+    // Run the actual query
+    (async () => {
+      try {
+        const results = await searcherRef.current.searchMovies(query, userHistory);
+        const formattedResults = searcherRef.current.formatResults(results);
+        
+        // Only update if still relevant
+        if (formattedResults.length > 0) {
+          setSuggestions(formattedResults);
+        }
+      } catch (err) {
+        console.error('Error getting suggestions:', err);
+      }
+    })();
   }, []);
   
-  // Main search function
+  // Optimized search function
   const searchMovies = useCallback(async (query, userHistory) => {
     if (!query || query.length < 2) {
       setResults([]);
@@ -377,6 +582,7 @@ const useMovieSearch = (apiKey, options = {}) => {
     }
   }, []);
   
+  // Return hook interface
   return {
     results,
     suggestions,
@@ -387,633 +593,4 @@ const useMovieSearch = (apiKey, options = {}) => {
   };
 };
 
-// Main AddMovieScreen Component
-function AddMovieScreen({ seen, unseen, onAddToSeen, onAddToUnseen, genres, isDarkMode }) {
-  // Initialize the movie search hook with user preferences
-  const {
-    results: searchResults,
-    suggestions,
-    loading,
-    error: searchError,
-    updateSuggestions,
-    searchMovies
-  } = useMovieSearch(API_KEY, {
-    maxResults: 20,
-    weights: {
-      titleSimilarity: 0.35,
-      userPreference: 0.35,
-      popularity: 0.3
-    }
-  });
-  
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [error, setError] = useState(null);
-  
-  // Rating modal state
-  const [ratingModalVisible, setRatingModalVisible] = useState(false);
-  const [selectedMovie, setSelectedMovie] = useState(null);
-  const [ratingInput, setRatingInput] = useState('');
-  const [isRerating, setIsRerating] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  
-  // For debouncing
-  const timeoutRef = useRef(null);
-
-  // Setup keyboard listeners
-  useEffect(() => {
-    const keyboardWillShowListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      e => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    
-    const keyboardWillHideListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    // Clean up listeners
-    return () => {
-      keyboardWillShowListener.remove();
-      keyboardWillHideListener.remove();
-    };
-  }, []);
-
-  // Handle search query changes with debouncing
-  const handleSearchChange = useCallback((text) => {
-    setSearchQuery(text);
-    
-    // Clear any existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    
-    // Set new timeout
-    timeoutRef.current = setTimeout(() => {
-      // Only show suggestions if query is at least 2 characters
-      if (text.length >= 2) {
-        updateSuggestions(text, seen); // Pass user history (seen movies)
-        setShowSuggestions(true);
-      } else {
-        setShowSuggestions(false);
-      }
-    }, 300); // 300ms debounce
-  }, [updateSuggestions, seen]);
-
-  // Clean up timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Select a suggestion
-  const selectSuggestion = useCallback((suggestion) => {
-    setSearchQuery(suggestion.title);
-    setShowSuggestions(false);
-    // Call the main search function
-    searchMovies(suggestion.title, seen);
-  }, [searchMovies, seen]);
-
-  // Handle search submission
-  const handleSearch = useCallback(() => {
-    if (!searchQuery.trim()) return;
-    
-    setShowSuggestions(false);
-    searchMovies(searchQuery, seen);
-  }, [searchQuery, searchMovies, seen]);
-
-  const getPosterUrl = useCallback(path => {
-    if (!path) return 'https://via.placeholder.com/342x513?text=No+Poster';
-    return path;
-  }, []);
-
-  // Open rating modal when user clicks "Seen It" or "Re-rate"
-  const openRatingModal = useCallback((movie, isRerate = false) => {
-    setSelectedMovie(movie);
-    // Initialize with empty string to ensure the placeholder shows
-    setRatingInput(isRerate ? movie.currentRating?.toString() : '');
-    setIsRerating(isRerate);
-    setRatingModalVisible(true);
-  }, []);
-
-  // Add to seen list with rating
-  const addToSeenWithRating = useCallback(() => {
-    if (!selectedMovie) return;
-
-    const rating = parseFloat(ratingInput);
-    if (isNaN(rating) || rating < 1 || rating > 10) {
-      alert('Please enter a valid rating between 1 and 10');
-      return;
-    }
-
-    if (isRerating) {
-      // Update existing movie rating
-      const updatedSeen = seen.map(m => 
-        m.id === selectedMovie.id 
-          ? { ...m, userRating: rating, eloRating: rating * 100 }
-          : m
-      );
-      const newSeenArray = [...updatedSeen];
-      onAddToSeen(newSeenArray.find(m => m.id === selectedMovie.id));
-      
-      // Update search results - no need to do this with the new approach as we re-search
-    } else {
-      // Add new movie to seen list
-      onAddToSeen({
-        ...selectedMovie,
-        userRating: rating,
-        eloRating: rating * 100,
-        comparisonHistory: [],
-        comparisonWins: 0,
-      });
-    }
-
-    // Close modal
-    setRatingModalVisible(false);
-    setSelectedMovie(null);
-    setRatingInput('');
-  }, [selectedMovie, ratingInput, isRerating, seen, onAddToSeen]);
-
-  const addToUnseen = useCallback(movie => {
-    onAddToUnseen(movie);
-  }, [onAddToUnseen]);
-
-  // Close modal on backdrop press
-  const handleCloseModal = useCallback(() => {
-    setRatingModalVisible(false);
-    setSelectedMovie(null);
-    setRatingInput('');
-    Keyboard.dismiss();
-  }, []);
-
-  // Update local error state when search error changes
-  useEffect(() => {
-    if (searchError) {
-      setError(searchError);
-    }
-  }, [searchError]);
-  
-  // Process search results to match the expected format for movie cards
-  const processedResults = useCallback(() => {
-    return searchResults.map(item => {
-      // Check if movie is already in seen list or watchlist
-      const existingMovie = seen.find(sm => sm.id === item.id);
-      const inWatchlist = unseen.some(um => um.id === item.id);
-      
-      return {
-        id: item.id,
-        title: item.title,
-        score: item.score || 0,
-        voteCount: item.voteCount || 0,
-        poster: item.poster, // Already has the full URL
-        overview: item.overview || "No overview available",
-        release_date: item.release_date || (item.year ? `${item.year}-01-01` : 'Unknown'),
-        genre_ids: item.genre_ids || [],
-        alreadyRated: !!existingMovie,
-        currentRating: existingMovie?.userRating || null,
-        inWatchlist: inWatchlist
-      };
-    });
-  }, [searchResults, seen, unseen]);
-
-  const renderedResults = processedResults();
-
-  return (
-    <SafeAreaView style={[layoutStyles.safeArea, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
-      <View
-        style={[
-          headerStyles.screenHeader,
-          { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5', borderBottomColor: isDarkMode ? '#8A2BE2' : '#E0E0E0' },
-        ]}
-      >
-        <Text style={[headerStyles.screenTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}>
-          Add Movies
-        </Text>
-      </View>
-      
-      {/* Search bar with suggestions dropdown */}
-      <View
-        style={[
-          searchStyles.searchContainer,
-          { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF', borderBottomColor: isDarkMode ? '#8A2BE2' : '#E0E0E0' },
-        ]}
-      >
-        <View style={{ flex: 1, position: 'relative' }}>
-          <TextInput
-            style={[
-              searchStyles.searchInput,
-              {
-                backgroundColor: isDarkMode ? '#4B0082' : '#F0F0F0',
-                borderColor: isDarkMode ? '#8A2BE2' : '#E0E0E0',
-                color: isDarkMode ? '#F5F5F5' : '#333',
-              },
-            ]}
-            placeholder="Search for a movie..."
-            placeholderTextColor={isDarkMode ? '#A9A9A9' : '#999'}
-            value={searchQuery}
-            onChangeText={handleSearchChange}
-            returnKeyType="search"
-            onSubmitEditing={handleSearch}
-          />
-          
-          {/* Suggestions dropdown */}
-          {showSuggestions && suggestions.length > 0 && (
-            <ScrollView
-              style={[
-                styles.suggestionsContainer,
-                {
-                  backgroundColor: isDarkMode 
-                    ? 'rgba(75, 0, 130, 0.85)' // Semi-transparent dark purple
-                    : 'rgba(245, 245, 245, 0.9)', // Semi-transparent light gray
-                  borderColor: isDarkMode ? '#8A2BE2' : '#E0E0E0',
-                }
-              ]}
-            >
-              {suggestions.map(suggestion => (
-                <TouchableOpacity
-                  key={suggestion.id}
-                  style={{
-                    padding: 12,
-                    borderBottomWidth: 1,
-                    borderBottomColor: isDarkMode ? '#8A2BE2' : '#E0E0E0',
-                    flexDirection: 'row',
-                    alignItems: 'center'
-                  }}
-                  onPress={() => selectSuggestion(suggestion)}
-                >
-                  {suggestion.thumbnailPoster && (
-                    <Image 
-                      source={{ uri: suggestion.thumbnailPoster }}
-                      style={{ width: 40, height: 60, marginRight: 10, borderRadius: 4 }}
-                      resizeMode="cover"
-                    />
-                  )}
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ 
-                      color: isDarkMode ? '#FFFFFF' : '#333333',
-                      fontSize: 14,
-                      fontWeight: '500'
-                    }}>
-                      {suggestion.title} {suggestion.year ? `(${suggestion.year})` : ''}
-                    </Text>
-                    {suggestion.voteCount > 0 && (
-                      <Text style={{ 
-                        color: isDarkMode ? '#D3D3D3' : '#666',
-                        fontSize: 12
-                      }}>
-                        {suggestion.voteCount.toLocaleString()} votes • Rating: {suggestion.score?.toFixed(1) || 'N/A'}
-                      </Text>
-                    )}
-                  </View>
-                  <View style={{ 
-                    backgroundColor: isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)', 
-                    paddingHorizontal: 6, 
-                    paddingVertical: 2, 
-                    borderRadius: 4,
-                    marginLeft: 4
-                  }}>
-                    <Text style={{ 
-                      color: isDarkMode ? '#FFFFFF' : '#333333',
-                      fontSize: 12
-                    }}>
-                      {Math.round(suggestion.similarity * 100)}%
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-        </View>
-        
-        <TouchableOpacity
-          style={[searchStyles.searchButton, { backgroundColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
-          onPress={handleSearch}
-          activeOpacity={0.7}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={{ color: '#FFFFFF', fontWeight: '600', fontSize: 16 }}>Search</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {error ? (
-        <View style={stateStyles.errorContainer}>
-          <Ionicons name="alert-circle" size={32} color={isDarkMode ? '#FFD700' : '#4B0082'} />
-          <Text style={{ color: isDarkMode ? '#FFD700' : '#4B0082', fontSize: 18, textAlign: 'center', marginTop: 10, fontWeight: '500' }}>
-            {error}
-          </Text>
-        </View>
-      ) : renderedResults.length === 0 && !loading ? (
-        <View style={stateStyles.emptyStateContainer}>
-          <Ionicons name="search" size={64} color={isDarkMode ? '#D3D3D3' : '#A9A9A9'} />
-          <Text style={{ color: isDarkMode ? '#D3D3D3' : '#666', fontSize: 16, textAlign: 'center', marginTop: 16 }}>
-            Search for movies to add to your lists
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={renderedResults}
-          keyExtractor={item => item.id.toString()}
-          contentContainerStyle={{ padding: 16 }}
-          renderItem={({ item }) => (
-            <View style={[movieCardStyles.movieCard, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5' }]}>
-              <Image
-                source={{ uri: getPosterUrl(item.poster) }}
-                style={movieCardStyles.moviePoster}
-                resizeMode="cover"
-              />
-              <View style={movieCardStyles.movieInfo}>
-                <Text
-                  style={[movieCardStyles.movieTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}
-                  numberOfLines={2}
-                >
-                  {item.title}
-                </Text>
-                <Text style={[movieCardStyles.releaseDate, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-                  {item.release_date && item.release_date !== 'Unknown' 
-                    ? new Date(item.release_date).getFullYear() 
-                    : item.year || 'Unknown'}
-                </Text>
-                <Text
-                  style={[movieCardStyles.movieOverview, { color: isDarkMode ? '#E0E0E0' : '#555' }]}
-                  numberOfLines={3}
-                >
-                  {item.overview}
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                  <Ionicons name="star" size={14} color={isDarkMode ? '#FFD700' : '#FFA000'} />
-                  <Text style={{ color: isDarkMode ? '#FFD700' : '#FFA000', marginLeft: 4 }}>
-                    {item.score.toFixed(1)} ({item.voteCount.toLocaleString()} votes)
-                  </Text>
-                </View>
-                <Text style={[movieCardStyles.genresText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-                  Genres: {item.genre_ids.map(id => genres[id] || 'Unknown').join(', ')}
-                </Text>
-                
-                {item.alreadyRated && (
-                  <Text style={{ color: isDarkMode ? '#72B01D' : '#4CAF50', marginTop: 4, fontWeight: 'bold' }}>
-                    Your rating: {item.currentRating.toFixed(1)}
-                  </Text>
-                )}
-                
-                <View style={{ flexDirection: 'row', marginTop: 10 }}>
-                  <TouchableOpacity
-                    style={[buttonStyles.rateButton, { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082', marginRight: 8 }]}
-                    onPress={() => openRatingModal(item, item.alreadyRated)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[buttonStyles.rateButtonText, { color: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
-                      {item.alreadyRated ? 'Re-rate' : 'Seen It'}
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  {!item.alreadyRated && !item.inWatchlist && (
-                    <TouchableOpacity
-                      style={[buttonStyles.skipButton, { borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
-                      onPress={() => addToUnseen(item)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[buttonStyles.skipButtonText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
-                        Add to Watchlist
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  
-                  {item.inWatchlist && (
-                    <View
-                      style={[buttonStyles.skipButton, { 
-                        borderColor: isDarkMode ? '#72B01D' : '#4CAF50',
-                        backgroundColor: isDarkMode ? '#1C2526' : '#F5F5F5'
-                      }]}
-                    >
-                      <Text style={{ color: isDarkMode ? '#72B01D' : '#4CAF50' }}>
-                        In Watchlist
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
-          )}
-        />
-      )}
-      
-      {/* Rating Modal - Improved for better keyboard handling */}
-      <Modal
-        visible={ratingModalVisible}
-        transparent
-        animationType="fade" // Changed from slide to fade for smoother appearance
-        onRequestClose={handleCloseModal}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={handleCloseModal}
-        >
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'position'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
-            style={{ width: '100%' }}
-          >
-            <TouchableOpacity 
-              activeOpacity={1} 
-              onPress={(e) => e.stopPropagation()}
-              style={[
-                styles.modalContainer,
-                {
-                  // Position the modal toward the top when keyboard is visible
-                  marginTop: keyboardHeight > 0 ? '10%' : '40%',
-                }
-              ]}
-            >
-              <View style={[
-                styles.modalContent,
-                { 
-                  backgroundColor: isDarkMode ? '#4B0082' : '#FFFFFF',
-                  // Remove maxHeight constraint to adapt to content
-                }
-              ]}>
-                <Text style={[
-                  styles.modalTitle,
-                  { color: isDarkMode ? '#F5F5F5' : '#333' }
-                ]}>
-                  {isRerating ? 'Update your rating' : 'Rate this movie'}
-                </Text>
-                
-                {selectedMovie && (
-                  <Text style={[
-                    styles.movieTitle,
-                    { color: isDarkMode ? '#F5F5F5' : '#333' }
-                  ]}>
-                    {selectedMovie.title}
-                  </Text>
-                )}
-                
-                <TextInput
-                  style={[
-                    styles.ratingInput,
-                    { 
-                      backgroundColor: isDarkMode ? '#1C2526' : '#F0F0F0',
-                      borderColor: isDarkMode ? '#8A2BE2' : '#E0E0E0',
-                      color: isDarkMode ? '#F5F5F5' : '#333',
-                    }
-                  ]}
-                  value={ratingInput}
-                  onChangeText={setRatingInput}
-                  keyboardType="decimal-pad"
-                  placeholder="Enter rating (1-10)"
-                  placeholderTextColor={isDarkMode ? '#aaa' : '#999'}
-                  maxLength={3}
-                  autoFocus={true}
-                  selectTextOnFocus={true}
-                />
-                
-                <View style={styles.buttonContainer}>
-                  <TouchableOpacity
-                    style={[
-                      styles.saveButton,
-                      { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082' }
-                    ]}
-                    onPress={addToSeenWithRating}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[
-                      styles.saveButtonText,
-                      { color: isDarkMode ? '#1C2526' : '#FFFFFF' }
-                    ]}>
-                      Save Rating
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.cancelButton,
-                      { 
-                        borderColor: isDarkMode ? '#8A2BE2' : '#4B0082',
-                      }
-                    ]}
-                    onPress={handleCloseModal}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[
-                      styles.cancelButtonText,
-                      { color: isDarkMode ? '#D3D3D3' : '#666' }
-                    ]}>
-                      Cancel
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </TouchableOpacity>
-          </KeyboardAvoidingView>
-        </TouchableOpacity>
-      </Modal>
-    </SafeAreaView>
-  );
-}
-
-// Updated styles
-const styles = StyleSheet.create({
-  suggestionsContainer: {
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    right: 0,
-    borderRadius: 8,
-    borderWidth: 1,
-    zIndex: 10,
-    maxHeight: 180, // Reduced height so it doesn't cover too much of the screen
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    width: '85%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    padding: 20,
-    borderRadius: 16,
-    width: '100%',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  movieTitle: {
-    marginBottom: 16,
-    fontWeight: '500',
-    textAlign: 'center',
-    fontSize: 16,
-  },
-  ratingInput: {
-    width: '100%',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 18,
-    textAlign: 'center',
-    marginBottom: 20,
-    fontWeight: '500',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  saveButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginRight: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  cancelButton: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginLeft: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  }
-});
-
-export default AddMovieScreen;
+export { MovieSearcher, useMovieSearch };

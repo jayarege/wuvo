@@ -5,12 +5,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  TextInput,
-  Image
+  TextInput
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import layoutStyles from '../../Styles/layoutStyles';
-import headerStyles from '../../Styles/headerStyles';
 
 function AuthScreen({ onAuthenticate, isDarkMode }) {
   const [email, setEmail] = useState('');
@@ -50,7 +47,7 @@ function AuthScreen({ onAuthenticate, isDarkMode }) {
   }, [onAuthenticate]);
 
   return (
-    <SafeAreaView style={[layoutStyles.safeArea, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
       <View style={[styles.container, { backgroundColor: isDarkMode ? '#1C2526' : '#FFFFFF' }]}>
         <View style={styles.logoContainer}>
           <Text style={[styles.appTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}>
@@ -142,6 +139,9 @@ function AuthScreen({ onAuthenticate, isDarkMode }) {
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     padding: 20,

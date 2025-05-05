@@ -41,20 +41,20 @@ function HomeScreen({ seen, unseen, genres, newReleases, isDarkMode, toggleTheme
   
   // Start auto-scrolling animation (wrapped in useCallback)
   const startAutoScroll = useCallback(() => {
-    if (autoScrollAnimation.current) {
-      autoScrollAnimation.current.stop();
-    }
-    
-    autoScrollAnimation.current = Animated.loop(
-      Animated.timing(position.x, {
-        toValue: -CAROUSEL_ITEM_WIDTH * 3, // Scroll through 3 items
-        duration: 15000, // 15 seconds for the loop
-        useNativeDriver: true,
-      })
-    );
-    
-    autoScrollAnimation.current.start();
-  }, [position.x, CAROUSEL_ITEM_WIDTH]);
+  if (autoScrollAnimation.current) {
+    autoScrollAnimation.current.stop();
+  }
+  
+  autoScrollAnimation.current = Animated.loop(
+    Animated.timing(position.x, {
+      toValue: -CAROUSEL_ITEM_WIDTH * 3, // Scroll through 3 items
+      duration: 15000, // 15 seconds for the loop
+      useNativeDriver: true,
+    })
+  );
+  
+  autoScrollAnimation.current.start();
+}, [position.x]); // Removed CAROUSEL_ITEM_WIDTH from dependency array
   
   // Setup auto-scrolling for recommendations
   useEffect(() => {
