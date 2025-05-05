@@ -1281,4 +1281,236 @@ function WildcardScreen({ seen, setSeen, unseen, onAddToSeen, onAddToUnseen, gen
               <View style={compareStyles.posterOverlay}>
                 <Text
                   style={[movieCardStyles.movieTitle, { color: isDarkMode ? '#F5F5F5' : '#333' }]}
-                     </Text>
+                    numberOfLines={2}
+                >
+                  {newMovie.title}
+                </Text>
+                <Text style={[compareStyles.ratingTag, { color: isDarkMode ? '#FFD700' : '#4B0082' }]}>
+                  TMDb: {newMovie.score.toFixed(1)} ({newMovie.voteCount} votes)
+                </Text>
+                <Text style={[movieCardStyles.genresText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
+                  {newMovie.genre_ids.map(id => genres[id] || 'Unknown').join(', ')}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+          <View style={compareStyles.actionButtons}>
+            <TouchableOpacity
+              style={[compareStyles.toughButton, { backgroundColor: isDarkMode ? '#4B0082' : '#F5F5F5', borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
+              onPress={handleToughChoice}
+              activeOpacity={0.7}
+            >
+              <Text style={[compareStyles.toughButtonText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
+                Too tough to decide
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[compareStyles.unseenButton, { backgroundColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
+              onPress={handleUnseen}
+              activeOpacity={0.7}
+            >
+              <Text style={[compareStyles.unseenButtonText, { color: isDarkMode ? '#F5F5F5' : '#FFFFFF' }]}>
+                Add to watchlist
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[buttonStyles.skipButton, { borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }]}
+              onPress={handleSkip}
+              activeOpacity={0.7}
+            >
+              <Text style={[buttonStyles.skipButtonText, { color: isDarkMode ? '#D3D3D3' : '#666' }]}>
+                Skip
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+      
+      {/* Filter Modal */}
+      <Modal
+        visible={filterModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={cancelFilters}
+      >
+        <View style={[modalStyles.modalOverlay, styles.modalOverlay]}>
+          <View style={[
+            modalStyles.modalContent,
+            styles.modalContent,
+            { backgroundColor: isDarkMode ? '#4B0082' : '#FFFFFF' }
+          ]}>
+            <Text style={[
+              modalStyles.modalTitle,
+              { color: isDarkMode ? '#F5F5F5' : '#333' }
+            ]}>
+              Filter Movies
+            </Text>
+            
+            {/* Genre Filter */}
+            <View style={styles.filterSection}>
+              <Text style={[
+                styles.sectionTitle,
+                { color: isDarkMode ? '#F5F5F5' : '#333' }
+              ]}>
+                Filter by Genre
+              </Text>
+              
+              <TouchableOpacity
+                style={[
+                  styles.genreButton,
+                  { 
+                    backgroundColor: tempGenre === null 
+                      ? (isDarkMode ? '#8A2BE2' : '#4B0082') 
+                      : 'transparent',
+                    borderColor: isDarkMode ? '#8A2BE2' : '#4B0082'
+                  }
+                ]}
+                onPress={() => setTempGenre(null)}
+              >
+                <Text style={[
+                  styles.genreButtonText,
+                  { 
+                    color: tempGenre === null 
+                      ? '#FFFFFF' 
+                      : (isDarkMode ? '#D3D3D3' : '#666')
+                  }
+                ]}>
+                  All Genres
+                </Text>
+              </TouchableOpacity>
+              
+              <ScrollView 
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.genreScrollContent}
+              >
+                {Object.entries(genres)
+                  .filter(([id, name]) => name) // Filter out undefined genres
+                  .map(([id, name]) => (
+                    <TouchableOpacity
+                      key={id}
+                      style={[
+                        styles.genreButton,
+                        { 
+                          backgroundColor: tempGenre === id 
+                            ? (isDarkMode ? '#8A2BE2' : '#4B0082') 
+                            : 'transparent',
+                          borderColor: isDarkMode ? '#8A2BE2' : '#4B0082'
+                        }
+                      ]}
+                      onPress={() => setTempGenre(id)}
+                    >
+                      <Text style={[
+                        styles.genreButtonText,
+                        { 
+                          color: tempGenre === id 
+                            ? '#FFFFFF' 
+                            : (isDarkMode ? '#D3D3D3' : '#666')
+                        }
+                      ]}>
+                        {name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                }
+              </ScrollView>
+            </View>
+            
+            {/* Action Buttons */}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.applyButton,
+                  { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082' }
+                ]}
+                onPress={applyFilters}
+              >
+                <Text style={[
+                  styles.applyButtonText,
+                  { color: isDarkMode ? '#4B0082' : '#FFFFFF' }
+                ]}>
+                  Apply Filters
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.cancelButton,
+                  { borderColor: isDarkMode ? '#8A2BE2' : '#4B0082' }
+                ]}
+                onPress={cancelFilters}
+              >
+                <Text style={[
+                  styles.cancelButtonText,
+                  { color: isDarkMode ? '#D3D3D3' : '#666' }
+                ]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      
+      {/* Baseline Complete Modal */}
+      <Modal
+        visible={showBaselineCompleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={handleBaselineCompleteAcknowledge}
+      >
+        <View style={[modalStyles.modalOverlay, styles.modalOverlay]}>
+          <View style={[
+            modalStyles.modalContent,
+            styles.modalContent,
+            { backgroundColor: isDarkMode ? '#4B0082' : '#FFFFFF' }
+          ]}>
+            <Ionicons 
+              name="checkmark-circle" 
+              size={64} 
+              color={isDarkMode ? '#FFD700' : '#4B0082'} 
+              style={styles.successIcon}
+            />
+            
+            <Text style={[
+              modalStyles.modalTitle,
+              { color: isDarkMode ? '#FFD700' : '#4B0082', fontSize: 24 }
+            ]}>
+              Baseline Complete!
+            </Text>
+            
+            <Text style={[
+              styles.completionText,
+              { color: isDarkMode ? '#F5F5F5' : '#333' }
+            ]}>
+              You've completed the baseline movie ratings. Congratulations!
+            </Text>
+            
+            <Text style={[
+              styles.completionSubtext,
+              { color: isDarkMode ? '#D3D3D3' : '#666' }
+            ]}>
+              From now on, movies will be recommended based on your personal preferences. The more movies you rate, the better your recommendations will become.
+            </Text>
+            
+            <TouchableOpacity
+              style={[
+                styles.continueButton,
+                { backgroundColor: isDarkMode ? '#FFD700' : '#4B0082' }
+              ]}
+              onPress={handleBaselineCompleteAcknowledge}
+            >
+              <Text style={[
+                styles.continueButtonText,
+                { color: isDarkMode ? '#4B0082' : '#FFFFFF' }
+              ]}>
+                Continue to Recommendations
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+export default WildcardScreen;
